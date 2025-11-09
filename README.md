@@ -10,6 +10,25 @@ A ready-to-use, out-of-the-box library for training scalable recommendation syst
 - **🚀 Extensible**: Modular architecture allows easy customization and feature expansion
 - **⚡ Production Ready**: Includes training, inference, and model persistence out of the box
 
+## 📁 Project Structure
+
+```
+recommendkit/
+├── configs/                          # Configuration files
+│   ├── correlated_dataset_config.json           # SimpleFusion config
+│   └── correlated_dataset_attention_config.json # Attention-based config
+├── datasets/
+│   └── synthetic/                    # Synthetic dataset generation
+│       ├── generate_correlated_dataset.py       # Dataset generator script
+│       └── correlated_dataset.json              # Generated dataset
+├── encoders/                         # Feature encoders (text, image, categorical, etc.)
+├── interaction/                      # Feature fusion and interaction modeling
+├── classifier/                       # Classification heads and loss functions
+├── trainer/                          # Training pipeline and data loading
+├── train.py                          # Main training script
+└── inference.py                      # Inference script
+```
+
 ## 📊 Simple Data Format
 
 The system uses an intuitive JSON format that supports multiple feature types:
@@ -53,10 +72,25 @@ The system automatically handles positive and negative sample generation:
 
 ## 🚀 Quick Start
 
+### Generate Synthetic Dataset (Optional)
+
+If you want to test the system with synthetic data, generate a correlated dataset:
+
+```bash
+cd datasets/synthetic
+python3 generate_correlated_dataset.py --num_users 1000 --num_items 100 --output correlated_dataset.json
+```
+
+This creates a realistic dataset with:
+- **1000 users** with diverse occupations, locations, ages, and salaries
+- **100+ items** across multiple categories (tech, medical, kitchen, etc.)
+- **Perfect correlations** between user attributes and item preferences (e.g., software engineers prefer tech items, chefs prefer kitchen items)
+- **Temporal interaction history** for each user
+
 ### Training with Default Configuration
 
 ```bash
-python3 train.py --config correlated_dataset_config.json --data datasets/synthetic/correlated_dataset.json
+python3 train.py --config configs/correlated_dataset_config.json --data datasets/synthetic/correlated_dataset.json
 ```
 
 This command will:
@@ -68,7 +102,7 @@ This command will:
 ### Running Inference
 
 ```bash
-python3 inference.py --model_path models/your_trained_model.pth --config correlated_dataset_config.json --data test_input.json
+python3 inference.py --model_path models/your_trained_model.pth --config configs/correlated_dataset_config.json --data test_input.json
 ```
 
 The inference script provides:
@@ -93,19 +127,41 @@ Built with **flexible fusion architecture** that adapts to your needs:
 - **Flexible**: Adaptive feature importance based on context
 
 ### **Easy Architecture Switching**
-Switch between fusion methods with simple code changes:
+Switch between fusion methods directly in your config file - no code changes needed!
 
-```python
-# In interaction/feature_fusion.py - Switch to Attention
-# Uncomment: self.fusion = FeatureFusionLayer(...)
-# Comment out: self.fusion = SimpleFusionLayer(...)
+**SimpleFusion Configuration:**
 
-# In interaction/interaction_modeling.py - Switch to Attention  
-# Uncomment: transformer-based forward method
-# Comment out: simple concatenation forward method
+```json
+{
+  "user_use_simple_fusion": true,
+  "item_use_simple_fusion": true,
+  "interaction_use_simple_fusion": true
+}
 ```
 
-**Configuration compatibility**: Your existing config files work with both architectures - no JSON changes needed!
+**Attention-Based Fusion Configuration:**
+
+```json
+{
+  "user_use_simple_fusion": false,
+  "user_num_attention_layers": 2,
+  "user_num_heads": 8,
+  "user_dropout": 0.1,
+  "user_use_cls_token": true,
+  
+  "item_use_simple_fusion": false,
+  "item_num_attention_layers": 2,
+  "item_num_heads": 8,
+  "item_dropout": 0.1,
+  
+  "interaction_use_simple_fusion": false,
+  "interaction_num_attention_layers": 2,
+  "interaction_num_heads": 8,
+  "interaction_dropout": 0.1
+}
+```
+
+See `configs/correlated_dataset_config.json` (SimpleFusion) and `configs/correlated_dataset_attention_config.json` (Attention) for complete examples!
 
 ## 🔧 Customization
 
