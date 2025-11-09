@@ -649,9 +649,16 @@ def extract_model_config(model: RecommendationPipeline) -> dict:
     
     if hasattr(model, 'temporal_encoder') and model.temporal_encoder is not None:
         config['temporal_encoder'] = {
+            'enable_item_lookup': True,
             'aggregation_strategy': str(model.temporal_encoder.aggregation_strategy.value),
             'output_dim': model.temporal_encoder.output_dim,
-            'item_embedding_dim': model.temporal_encoder.item_embedding_dim
+            'item_embedding_dim': model.temporal_encoder.item_embedding_dim,
+            'lstm_hidden_dim': model.temporal_encoder.lstm_hidden_dim,
+            'lstm_num_layers': model.temporal_encoder.lstm_num_layers,
+            'lstm_dropout': getattr(model.temporal_encoder.lstm, 'dropout', 0.0),
+            'bidirectional': model.temporal_encoder.bidirectional,
+            'max_sequence_length': model.temporal_encoder.max_sequence_length,
+            'missing_item_strategy': model.temporal_encoder.missing_item_strategy
         }
     
     return config
