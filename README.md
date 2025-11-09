@@ -113,7 +113,11 @@ The inference script provides:
 
 ## 🏗️ Architecture
 
-Built with **flexible fusion architecture** that adapts to your needs:
+Built with **flexible two-tower fusion architecture** that adapts to your needs:
+
+![Two-Tower Architecture](assets/recommendkit.png)
+
+The system uses a **two-tower architecture** where user and item features are processed independently through their respective towers, then combined for interaction modeling and final classification.
 
 ### **SimpleFusion (Default)**
 - **Optimized for Speed**: Concatenation + MLP approach for fast training and inference
