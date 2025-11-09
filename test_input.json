@@ -1,0 +1,85 @@
+{
+    "user_data": [
+        {
+            "user_id": 1,
+            "image": {"profile_pic": "/image/profile1.jpg"},
+            "text": {"bio": "I am a college guy in Texas studying computer science", "summary": "Tech enthusiast and gamer"},
+            "categorical": {"country": "USA", "gender": "male", "state": "texas"},
+            "continuous": {"age": 20.5, "income": 25000.0},
+            "temporal": {
+                "prev_50_posts": [34, 56, 7646, 342, 123, 456],
+                "last_10_session_times": [5, 11, 15, 2, 3, 5, 8, 12, 4, 7]
+            }
+        },
+        {
+            "user_id": 2,
+            "image": {"profile_pic": "/image/profile2.jpg"},
+            "text": {"bio": "Artist from California", "summary": "Creative professional and designer"},
+            "categorical": {"country": "USA", "gender": "female", "state": "california"},
+            "continuous": {"age": 28.0, "income": 45000.0},
+            "temporal": {
+                "prev_50_posts": [12, 89, 234, 567],
+                "last_10_session_times": [10, 5, 20, 15, 8]
+            }
+        },
+        {
+            "user_id": 3,
+            "image": {"profile_pic": "/image/profile3.jpg"},
+            "text": {"bio": "Business professional from New York", "summary": "Finance and productivity focused"},
+            "categorical": {"country": "USA", "gender": "male", "state": "new_york"},
+            "continuous": {"age": 35.0, "income": 75000.0},
+            "temporal": {
+                "prev_50_posts": [45, 78, 234, 567, 123],
+                "last_10_session_times": [8, 12, 18, 25, 10]
+            }
+        }
+    ],
+    "item_data": [
+        {
+            "item_id": 101,
+            "image": {"main_image": "/items/item101.jpg", "thumbnail": "/items/thumb101.jpg"},
+            "text": {"title": "Gaming Laptop", "description": "High-performance laptop for gaming and programming"},
+            "categorical": {"category": "electronics", "brand": "TechCorp", "condition": "new"},
+            "continuous": {"price": 1299.99, "rating": 4.5, "weight": 2.5},
+            "temporal": {
+                "price_history": [1399.99, 1349.99, 1299.99, 1279.99],
+                "view_counts_daily": [45, 67, 89, 123, 156, 134, 98]
+            }
+        },
+        {
+            "item_id": 102,
+            "image": {"main_image": "/items/item102.jpg", "thumbnail": "/items/thumb102.jpg"},
+            "text": {"title": "Art Supply Kit", "description": "Professional art supplies for digital and traditional art"},
+            "categorical": {"category": "art_supplies", "brand": "ArtMaster", "condition": "new"},
+            "continuous": {"price": 89.99, "rating": 4.8, "weight": 1.0},
+            "temporal": {
+                "price_history": [99.99, 94.99, 89.99, 87.99],
+                "view_counts_daily": [23, 34, 45, 56, 67, 45, 34]
+            }
+        },
+        {
+            "item_id": 103,
+            "image": {"main_image": "/items/item103.jpg", "thumbnail": "/items/thumb103.jpg"},
+            "text": {"title": "Business Planner", "description": "Premium leather-bound planner for professionals"},
+            "categorical": {"category": "office_supplies", "brand": "PlannerPro", "condition": "new"},
+            "continuous": {"price": 45.99, "rating": 4.2, "weight": 0.5},
+            "temporal": {
+                "price_history": [49.99, 47.99, 45.99, 43.99],
+                "view_counts_daily": [12, 18, 25, 30, 28, 22, 15]
+            }
+        }
+    ],
+    "interactions": [
+        {"user_id": 1, "item_id": 101, "interaction_type": "purchase", "timestamp": "2024-01-15T10:30:00"},
+        {"user_id": 1, "item_id": 102, "interaction_type": "view", "timestamp": "2024-01-16T14:20:00"},
+        {"user_id": 1, "item_id": 103, "interaction_type": "view", "timestamp": "2024-01-17T09:15:00"},
+        
+        {"user_id": 2, "item_id": 101, "interaction_type": "view", "timestamp": "2024-01-15T16:45:00"},
+        {"user_id": 2, "item_id": 102, "interaction_type": "purchase", "timestamp": "2024-01-16T11:30:00"},
+        {"user_id": 2, "item_id": 103, "interaction_type": "view", "timestamp": "2024-01-18T13:20:00"},
+        
+        {"user_id": 3, "item_id": 101, "interaction_type": "cart", "timestamp": "2024-01-14T08:00:00"},
+        {"user_id": 3, "item_id": 102, "interaction_type": "view", "timestamp": "2024-01-15T12:30:00"},
+        {"user_id": 3, "item_id": 103, "interaction_type": "purchase", "timestamp": "2024-01-16T15:45:00"}
+    ]
+}

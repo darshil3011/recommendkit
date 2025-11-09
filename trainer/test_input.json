@@ -1,0 +1,39 @@
+{
+    "user_data": [
+        {
+            "user_id": 1,
+            "image": {"profile_pic": "/image/profile1.jpg"},
+            "text": {"bio": "I am a college guy in Texas", "summary": "some text"},
+            "categorical": {"country": "USA", "gender": "male", "state": "texas"},
+            "continuous": {"age": 20.5, "income": 25000.0},
+            "temporal": {
+                "prev_50_posts": [34, 56, 7646, 342, 123, 456],
+                "last_10_session_times": [5, 11, 15, 2, 3, 5, 8, 12, 4, 7]
+            }
+        },
+        {
+            "user_id": 2,
+            "image": {"profile_pic": "/image/profile2.jpg"},
+            "text": {"bio": "Artist from California"},
+            "categorical": {"country": "USA", "gender": "female", "state": "california"},
+            "continuous": {"age": 28.0, "income": 45000.0},
+            "temporal": {
+                "prev_50_posts": [12, 89, 234, 567],
+                "last_10_session_times": [10, 5, 20, 15, 8]
+            }
+        }
+    ],
+    "item_data": [
+        {
+            "item_id": 101,
+            "image": {"main_image": "/items/item101.jpg", "thumbnail": "/items/thumb101.jpg"},
+            "text": {"title": "Awesome Product", "description": "This is a great product"},
+            "categorical": {"category": "electronics", "brand": "TechCorp", "condition": "new"},
+            "continuous": {"price": 99.99, "rating": 4.5, "weight": 1.2},
+            "temporal": {
+                "price_history": [89.99, 94.99, 99.99, 95.99],
+                "view_counts_daily": [10, 15, 23, 18, 31, 27, 19]
+            }
+        }
+    ]
+}
