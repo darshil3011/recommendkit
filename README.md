@@ -1,6 +1,10 @@
-# 🚀 Universal Recommendation System
-
-A ready-to-use, out-of-the-box library for training scalable recommendation systems. Built for accessibility and extensibility, this system can be adapted to any use case with minimal configuration.
+<div align="center">
+  <img src="assets/recommendkit_banner.png" alt="RecommendKit Banner" width="100%">
+  
+  # RecommendKit - Universal Recommendation System Framework
+  
+  A ready-to-use, out-of-the-box library for training scalable recommendation systems. Built for accessibility and extensibility, this system can be adapted to any use case with minimal configuration.
+</div>
 
 ## ✨ Key Features
 
