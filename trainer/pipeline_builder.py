@@ -100,7 +100,7 @@ class DimensionAligner(nn.Module):
         """
         if not embeddings:
             return {}
-        
+
         # Find the target batch size (use the most common batch size)
         batch_sizes = [emb.shape[0] for emb in embeddings.values()]
         target_batch_size = max(set(batch_sizes), key=batch_sizes.count)
@@ -678,7 +678,7 @@ def save_model_config(model: RecommendationPipeline, config_path: str):
         json.dump(config, f, indent=2)
 
 
-def save_complete_model(model: RecommendationPipeline, save_dir: str, model_name: str = "model"):
+def save_complete_model(model: RecommendationPipeline, save_dir: str, model_name: str = "model", verbose: bool = True):
     """
     Save complete model including all state dicts and parameters
     
@@ -694,9 +694,160 @@ def save_complete_model(model: RecommendationPipeline, save_dir: str, model_name
     # Create save directory if it doesn't exist
     os.makedirs(save_dir, exist_ok=True)
     
+    # Ensure model is in eval mode and all parameters are initialized
+    model.eval()
+    
+    # CRITICAL: Ensure all parameters are registered by doing a dummy forward pass
+    # This ensures any lazy initialization happens before saving
+    try:
+        # Get sample data from the model's inputs if available
+        # Create minimal dummy inputs to trigger parameter registration
+        dummy_user_data = {}
+        dummy_item_data = {}
+        
+        # Try to create minimal valid inputs based on what encoders exist
+        if hasattr(model, 'categorical_encoder') and model.categorical_encoder is not None:
+            # Create dummy categorical data
+            dummy_user_data['categorical'] = {'field_0': 'dummy'}
+            dummy_item_data['categorical'] = {'field_0': 'dummy'}
+        
+        if hasattr(model, 'continuous_encoder') and model.continuous_encoder is not None:
+            dummy_user_data['continuous'] = {'field_0': 0.0}
+            dummy_item_data['continuous'] = {'field_0': 0.0}
+        
+        if hasattr(model, 'text_encoder') and model.text_encoder is not None:
+            dummy_item_data['text'] = {'field_0': 'dummy text'}
+        
+        # Only do forward pass if we have at least some data
+        if dummy_user_data or dummy_item_data:
+            with torch.no_grad():
+                try:
+                    _ = model(dummy_user_data, dummy_item_data)
+                except Exception:
+                    # If forward pass fails, that's okay - parameters should still be registered
+                    pass
+    except Exception:
+        # If dummy forward pass fails, continue anyway
+        pass
+    
+    # Force initialization of fusion projections if they exist but aren't initialized
+    # During training, these should already be initialized, but we check to be safe
+    fusion_layers_to_check = []
+    if hasattr(model, 'user_generator') and hasattr(model.user_generator, 'user_fusion'):
+        if hasattr(model.user_generator.user_fusion, 'projection') and model.user_generator.user_fusion.projection is None:
+            fusion_layers_to_check.append(('user_generator.user_fusion', model.user_generator.user_fusion))
+    
+    if hasattr(model, 'item_generator') and hasattr(model.item_generator, 'item_fusion'):
+        if hasattr(model.item_generator.item_fusion, 'projection') and model.item_generator.item_fusion.projection is None:
+            fusion_layers_to_check.append(('item_generator.item_fusion', model.item_generator.item_fusion))
+    
+    if hasattr(model, 'interaction_generator') and hasattr(model.interaction_generator, 'interaction_fusion'):
+        if hasattr(model.interaction_generator.interaction_fusion, 'projection') and model.interaction_generator.interaction_fusion.projection is None:
+            fusion_layers_to_check.append(('interaction_generator.interaction_fusion', model.interaction_generator.interaction_fusion))
+    
+    # Try to initialize fusion projections with dummy data
+    for layer_name, fusion_layer in fusion_layers_to_check:
+        try:
+            # Create dummy feature embeddings (try with 3 features as a reasonable default)
+            dummy_embeddings = {
+                'feature_0': torch.zeros(1, model.embedding_dim),
+                'feature_1': torch.zeros(1, model.embedding_dim),
+                'feature_2': torch.zeros(1, model.embedding_dim)
+            }
+            dummy_types = {k: 'categorical' for k in dummy_embeddings.keys()}
+            with torch.no_grad():
+                _ = fusion_layer(dummy_embeddings, dummy_types)
+            if verbose:
+                print(f"   ✅ Initialized {layer_name} projection")
+        except Exception as e:
+            if verbose:
+                print(f"   ⚠️  Could not initialize {layer_name} projection: {e}")
+                print(f"   ⚠️  WARNING: Fusion projection not initialized - weights may not be saved!")
+    
+    # Get complete state dict
+    state_dict = model.state_dict()
+    
+    # Get all parameter names from the model
+    model_param_names = set(name for name, _ in model.named_parameters())
+    state_dict_keys = set(state_dict.keys())
+    
+    # Validate that all parameters are present and initialized
+    total_params = sum(p.numel() for p in model.parameters())
+    state_dict_params = sum(p.numel() for p in state_dict.values())
+    
+    # Check for missing parameters
+    missing_params = model_param_names - state_dict_keys
+    
+    if missing_params:
+        error_msg = f"❌ CRITICAL ERROR: {len(missing_params)} parameters are NOT in state_dict!\n"
+        error_msg += "   These parameters will NOT be saved:\n"
+        for name in sorted(missing_params):
+            error_msg += f"   - {name}\n"
+        if verbose:
+            print(error_msg)
+        raise RuntimeError(f"Failed to register all model parameters. {len(missing_params)} parameters missing from state_dict.")
+    
+    if verbose:
+        if total_params != state_dict_params:
+            print(f"⚠️  Warning: Parameter count mismatch!")
+            print(f"   Model parameters: {total_params:,}")
+            print(f"   State dict parameters: {state_dict_params:,}")
+            print(f"   Difference: {abs(total_params - state_dict_params):,}")
+            print(f"   This may indicate some parameters are not being saved.")
+        
+        # Check for any uninitialized parameters (all zeros or very small)
+        uninitialized = []
+        for name, param in state_dict.items():
+            if param.numel() > 0:
+                # Check if parameter is essentially zero (might indicate uninitialized)
+                if torch.allclose(param, torch.zeros_like(param), atol=1e-8):
+                    uninitialized.append(name)
+        
+        if uninitialized:
+            print(f"⚠️  Warning: {len(uninitialized)} parameters appear uninitialized (all zeros):")
+            for name in uninitialized[:10]:  # Show first 10
+                print(f"   - {name}")
+            if len(uninitialized) > 10:
+                print(f"   ... and {len(uninitialized) - 10} more")
+    
     # Save main model state dict
     model_path = os.path.join(save_dir, f"{model_name}.pt")
-    torch.save(model.state_dict(), model_path)
+    torch.save(state_dict, model_path)
+    
+    # Verify saved file contains all keys
+    saved_state = torch.load(model_path, map_location='cpu')
+    saved_keys = set(saved_state.keys())
+    original_keys = set(state_dict.keys())
+    
+    if saved_keys != original_keys:
+        missing_in_saved = original_keys - saved_keys
+        error_msg = f"❌ Error: Some keys were not saved!\n"
+        for key in missing_in_saved:
+            error_msg += f"   Missing: {key}\n"
+        if verbose:
+            print(error_msg)
+        raise RuntimeError(f"Failed to save all model parameters. {len(missing_in_saved)} keys missing.")
+    
+    if verbose:
+        print(f"✅ Saved {len(saved_keys)} parameters to {model_path}")
+        print(f"   Total parameters: {state_dict_params:,}")
+        
+        # Debug: List all categorical encoder MLP keys to verify structure
+        cat_mlp_keys = [k for k in sorted(state_dict.keys()) if 'categorical_encoder.field_embeddings.field_0.mlp' in k]
+        if cat_mlp_keys:
+            print(f"\n📋 Categorical encoder MLP keys in state_dict ({len(cat_mlp_keys)} keys):")
+            for key in cat_mlp_keys:
+                param_shape = state_dict[key].shape
+                print(f"   {key}: {param_shape}")
+            
+            # Check if layer 3 (final projection) exists
+            has_layer_3 = any('.mlp.3.' in k for k in cat_mlp_keys)
+            if not has_layer_3:
+                print(f"\n⚠️  WARNING: Final projection layer (mlp.3) is MISSING!")
+                print(f"   Expected keys like: categorical_encoder.field_embeddings.field_0.mlp.3.weight")
+                print(f"   This indicates the MLP structure is incomplete.")
+            else:
+                print(f"\n✅ Final projection layer (mlp.3) is present")
     
     # Save model configuration
     config_path = os.path.join(save_dir, f"{model_name}_config.json")
@@ -760,11 +911,12 @@ def save_complete_model(model: RecommendationPipeline, save_dir: str, model_name
     with open(manifest_path, "w") as f:
         json.dump(manifest, f, indent=2)
     
-    print(f"✅ Complete model saved to {save_dir}/")
-    print(f"   Main model: {model_path}")
-    print(f"   Config: {config_path}")
-    print(f"   Manifest: {manifest_path}")
-    print(f"   Components: {len(manifest['components'])} individual state dicts")
+    if verbose:
+        print(f"✅ Complete model saved to {save_dir}/")
+        print(f"   Main model: {model_path}")
+        print(f"   Config: {config_path}")
+        print(f"   Manifest: {manifest_path}")
+        print(f"   Components: {len(manifest['components'])} individual state dicts")
 
 
 def load_model_from_config(config_path: str, weights_path: str, item_data: Optional[List[Dict[str, Any]]] = None) -> RecommendationPipeline:
@@ -881,16 +1033,130 @@ def load_model_from_config(config_path: str, weights_path: str, item_data: Optio
                     # Force creation of projection for user dimension aligner
                     model.user_dimension_aligner._get_projection(dim)
     
+    # 2. Pre-initialize continuous encoder MLPs from checkpoint
+    # Extract input_dim from checkpoint weights
+    user_continuous_mlp_keys = [k for k in state_dict.keys() if 'user_continuous_encoder.mlp.0.weight' in k]
+    if user_continuous_mlp_keys:
+        # Get input dimension from first layer weight
+        weight_key = user_continuous_mlp_keys[0]
+        input_dim = state_dict[weight_key].shape[1]  # Input dim is second dimension
+        
+        # Force initialization of user continuous encoder MLP
+        if hasattr(model, 'user_continuous_encoder') and model.user_continuous_encoder is not None:
+            if model.user_continuous_encoder.mlp is None:
+                model.user_continuous_encoder._initialize_mlp(input_dim)
+                print(f"✅ Pre-initialized user_continuous_encoder MLP (input_dim={input_dim})")
+    
+    item_continuous_mlp_keys = [k for k in state_dict.keys() if 'item_continuous_encoder.mlp.0.weight' in k]
+    if item_continuous_mlp_keys:
+        weight_key = item_continuous_mlp_keys[0]
+        input_dim = state_dict[weight_key].shape[1]
+        
+        # Force initialization of item continuous encoder MLP
+        if hasattr(model, 'item_continuous_encoder') and model.item_continuous_encoder is not None:
+            if model.item_continuous_encoder.mlp is None:
+                model.item_continuous_encoder._initialize_mlp(input_dim)
+                print(f"✅ Pre-initialized item_continuous_encoder MLP (input_dim={input_dim})")
+    
+    # 3. Pre-initialize fusion projections from checkpoint
+    # Extract num_features from checkpoint projection weights
+    fusion_projection_keys = [k for k in state_dict.keys() if 'fusion.projection.0.weight' in k]
+    
+    for projection_key in fusion_projection_keys:
+        # Extract which fusion layer this belongs to
+        # Format: "user_generator.user_fusion.projection.0.weight" or similar
+        # Split by '.projection.0.weight' to get the path to the fusion layer
+        if '.projection.0.weight' in projection_key:
+            parts = projection_key.split('.projection.0.weight')[0]
+            fusion_path = parts.split('.')  # e.g., ['user_generator', 'user_fusion']
+        else:
+            print(f"⚠️  Warning: Unexpected fusion projection key format: {projection_key}")
+            continue
+        
+        # Get the weight tensor to determine input_dim
+        weight_tensor = state_dict[projection_key]
+        input_dim = weight_tensor.shape[1]  # Input dim is second dimension
+        num_features = input_dim // model.embedding_dim
+        
+        # Navigate to the fusion layer
+        try:
+            fusion_layer = model
+            for part in fusion_path:
+                if fusion_layer is None:
+                    raise AttributeError(f"Intermediate attribute is None when navigating to {part}")
+                fusion_layer = getattr(fusion_layer, part)
+            
+            # Verify we got a valid fusion layer
+            if fusion_layer is None:
+                raise AttributeError(f"Fusion layer is None after navigation: {'.'.join(fusion_path)}")
+            
+            # Check if projection needs initialization
+            if hasattr(fusion_layer, 'projection') and fusion_layer.projection is None:
+                fusion_layer._initialize_projection(num_features)
+                # CRITICAL: Set _projection_initialized to True to prevent re-initialization in forward pass
+                fusion_layer._projection_initialized = True
+                print(f"✅ Pre-initialized {'.'.join(fusion_path)}.projection (num_features={num_features})")
+            elif hasattr(fusion_layer, 'projection') and fusion_layer.projection is not None:
+                # Projection already exists (loaded from checkpoint), but _projection_initialized might be False
+                # CRITICAL: Set it to True to prevent re-initialization in forward pass
+                fusion_layer._projection_initialized = True
+                print(f"✅ Verified {'.'.join(fusion_path)}.projection is initialized (from checkpoint)")
+            elif not hasattr(fusion_layer, 'projection'):
+                print(f"⚠️  Warning: {'.'.join(fusion_path)} does not have 'projection' attribute (might not be SimpleFusionLayer)")
+        except (AttributeError, TypeError) as e:
+            print(f"⚠️  Warning: Could not pre-initialize fusion projection for {projection_key}: {e}")
+            import traceback
+            traceback.print_exc()
+    
     # Load the state dict with strict=False for dimension aligner compatibility
     missing_keys, unexpected_keys = model.load_state_dict(state_dict, strict=False)
+    
+    # CRITICAL: After loading state dict, ensure _projection_initialized is True for all fusion layers
+    # This prevents re-initialization during forward pass
+    for name, module in model.named_modules():
+        if hasattr(module, 'projection') and module.projection is not None:
+            if hasattr(module, '_projection_initialized'):
+                module._projection_initialized = True
     
     # Only warn about unexpected keys if they're not dimension aligner related
     unexpected_non_aligner = [k for k in unexpected_keys if 'dimension_aligner.projections' not in k]
     if unexpected_non_aligner:
         print(f"\n⚠️  Warning: {len(unexpected_non_aligner)} unexpected keys in checkpoint (ignoring)")
+        if len(unexpected_non_aligner) <= 20:
+            for key in sorted(unexpected_non_aligner):
+                print(f"   - {key}")
+        else:
+            for key in sorted(unexpected_non_aligner)[:10]:
+                print(f"   - {key}")
+            print(f"   ... and {len(unexpected_non_aligner) - 10} more")
     
     if missing_keys:
-        print(f"⚠️  Warning: {len(missing_keys)} missing keys in checkpoint (using random initialization)")
+        print(f"\n⚠️  Warning: {len(missing_keys)} missing keys in checkpoint (using random initialization)")
+        print(f"   These parameters will be randomly initialized, causing non-deterministic behavior!")
+        print(f"   Missing keys:")
+        for key in sorted(missing_keys):
+            print(f"   - {key}")
+        print(f"\n   ⚠️  This will cause non-deterministic results between runs!")
+        print(f"   ✅ Solution: Retrain the model to save a complete checkpoint.")
+    
+    # Verify loaded parameters match expected structure
+    loaded_state = model.state_dict()
+    loaded_keys = set(loaded_state.keys())
+    expected_keys = set(model.state_dict().keys())
+    
+    # Check if all critical parameters were loaded
+    critical_missing = []
+    for key in missing_keys:
+        # Check if it's a critical parameter (not just dimension aligner)
+        if 'dimension_aligner' not in key:
+            critical_missing.append(key)
+    
+    if critical_missing:
+        print(f"\n❌ Critical parameters missing from checkpoint:")
+        for key in sorted(critical_missing):
+            print(f"   - {key}")
+        print(f"\n   This checkpoint is incomplete and will produce non-deterministic results.")
+        print(f"   Please retrain the model to generate a complete checkpoint.")
     
     return model
 

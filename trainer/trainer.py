@@ -92,9 +92,10 @@ def train_model(model: RecommendationPipeline,
         epoch_train_acc = 0.0
         num_train_batches = 0
         
-        # Create progress bar for training
+        # Create progress bar for training (updates in place, clears after completion)
         train_pbar = tqdm(train_loader, desc=f"Epoch {epoch+1}/{num_epochs} [Train]", 
-                         leave=False, ncols=100)
+                         leave=False, ncols=120, file=sys.stdout, dynamic_ncols=True, 
+                         position=0, mininterval=0.1)
         
         for batch in train_pbar:
             # Extract batch data (this depends on your data loader structure)
@@ -148,9 +149,10 @@ def train_model(model: RecommendationPipeline,
             epoch_val_acc = 0.0
             num_val_batches = 0
             
-            # Create progress bar for validation
+            # Create progress bar for validation (updates in place, clears after completion)
             val_pbar = tqdm(val_loader, desc=f"Epoch {epoch+1}/{num_epochs} [Val]", 
-                           leave=False, ncols=100)
+                           leave=False, ncols=120, file=sys.stdout, dynamic_ncols=True,
+                           position=0, mininterval=0.1)
             
             with torch.no_grad():
                 for batch in val_pbar:
@@ -181,7 +183,7 @@ def train_model(model: RecommendationPipeline,
             val_losses.append(avg_val_loss)
             val_accuracies.append(avg_val_acc)
             
-            # Save best model
+            # Save best model (if validation loss improved)
             if save_path and avg_val_loss < best_val_loss:
                 best_val_loss = avg_val_loss
                 # Import the save function
@@ -190,12 +192,29 @@ def train_model(model: RecommendationPipeline,
                     import os
                     save_dir = os.path.dirname(save_path) if os.path.dirname(save_path) else "models"
                     model_name = os.path.splitext(os.path.basename(save_path))[0]
-                    save_complete_model(model, save_dir, model_name)
-                    print(f"New best model saved with val_loss: {best_val_loss:.4f}")
+                    save_complete_model(model, save_dir, model_name, verbose=True)  # Enable verbose to catch issues
+                    # Use tqdm.write to avoid interfering with progress bar
+                    tqdm.write(f"✅ New best model saved (val_loss: {best_val_loss:.4f})")
                 except ImportError:
                     # Fallback to simple state dict saving
                     torch.save(model.state_dict(), save_path)
-                    print(f"New best model saved with val_loss: {best_val_loss:.4f}")
+                    tqdm.write(f"✅ New best model saved (val_loss: {best_val_loss:.4f})")
+        
+        # Save model every epoch (overwrite) - ensures we have latest weights even if training stops early
+        if save_path:
+            try:
+                from trainer.pipeline_builder import save_complete_model
+                import os
+                save_dir = os.path.dirname(save_path) if os.path.dirname(save_path) else "models"
+                model_name = os.path.splitext(os.path.basename(save_path))[0]
+                # Save every epoch (overwrites previous) - use verbose=True for first epoch to catch issues
+                save_complete_model(model, save_dir, model_name, verbose=(epoch == 0))
+                # Use tqdm.write to avoid interfering with progress bar
+                tqdm.write(f"💾 Model saved (epoch {epoch+1}/{num_epochs})")
+            except ImportError:
+                # Fallback to simple state dict saving
+                torch.save(model.state_dict(), save_path)
+                tqdm.write(f"💾 Model saved (epoch {epoch+1}/{num_epochs})")
         
         # Scheduler step
         if scheduler is not None:
@@ -204,15 +223,15 @@ def train_model(model: RecommendationPipeline,
             else:
                 scheduler.step()
         
-        # Print epoch summary
+        # Print epoch summary (use tqdm.write to avoid interfering with progress bar)
         if (epoch + 1) % print_every == 0:
             elapsed = time.time() - start_time
-            print(f"\nEpoch {epoch + 1}/{num_epochs} Summary ({elapsed/60:.1f}m)")
-            print(f"  Train Loss: {avg_train_loss:.4f}, Train Acc: {avg_train_acc:.4f}")
+            tqdm.write(f"\n📊 Epoch {epoch + 1}/{num_epochs} Summary ({elapsed/60:.1f}m)")
+            tqdm.write(f"  Train Loss: {avg_train_loss:.4f}, Train Acc: {avg_train_acc:.4f}")
             if val_loader is not None:
-                print(f"  Val Loss: {avg_val_loss:.4f}, Val Acc: {avg_val_acc:.4f}")
-            print(f"  LR: {optimizer.param_groups[0]['lr']:.6f}")
-            print()  # Add spacing
+                tqdm.write(f"  Val Loss: {avg_val_loss:.4f}, Val Acc: {avg_val_acc:.4f}")
+            tqdm.write(f"  LR: {optimizer.param_groups[0]['lr']:.6f}")
+            tqdm.write("")  # Add spacing
     
     total_time = time.time() - start_time
     print(f"\nTraining completed in {total_time/60:.1f} minutes")

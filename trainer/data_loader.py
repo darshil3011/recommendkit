@@ -245,32 +245,44 @@ def create_data_loaders(inputs: Inputs,
                        batch_size: int = 32,
                        negative_sampling_ratio: float = 1.0,
                        num_workers: int = 0,
-                       seed: int = 42) -> Tuple[DataLoader, Optional[DataLoader]]:
+                       seed: int = 42,
+                       test_split: float = 0.05) -> Tuple[DataLoader, Optional[DataLoader], List[Tuple[Union[str, int], Union[str, int], int]], List[Tuple[Union[str, int], Union[str, int], int]]]:
     """
-    Create train and validation data loaders
+    Create train and validation data loaders, and return test and train interactions
     
     Args:
         inputs: Inputs object with user and item data
         interactions: List of (user_id, item_id, label) interactions
-        train_split: Fraction of data for training
+        train_split: Fraction of data for training (remaining goes to validation)
         batch_size: Batch size
         negative_sampling_ratio: Ratio of negative to positive samples
         num_workers: Number of worker processes for DataLoader
         seed: Random seed
+        test_split: Fraction of data for testing (default 0.05 = 5%)
         
     Returns:
         train_loader: Training DataLoader
         val_loader: Validation DataLoader (None if train_split=1.0)
+        test_interactions: Test interactions list for evaluation
+        train_interactions: Training interactions list (for exclusion during evaluation)
     """
-    # Split interactions into train and validation
+    # Split interactions into train, validation, and test
     random.seed(seed)
     random.shuffle(interactions)
     
-    split_idx = int(len(interactions) * train_split)
-    train_interactions = interactions[:split_idx]
-    val_interactions = interactions[split_idx:] if split_idx < len(interactions) else []
+    # First split: test set (5%)
+    test_split_idx = int(len(interactions) * test_split)
+    test_interactions = interactions[:test_split_idx]
+    remaining_interactions = interactions[test_split_idx:]
     
-    print(f"Split interactions: {len(train_interactions)} train, {len(val_interactions)} validation")
+    # Second split: train and validation from remaining
+    # Adjust train_split to account for test split
+    adjusted_train_split = train_split / (1 - test_split)
+    split_idx = int(len(remaining_interactions) * adjusted_train_split)
+    train_interactions = remaining_interactions[:split_idx]
+    val_interactions = remaining_interactions[split_idx:] if split_idx < len(remaining_interactions) else []
+    
+    print(f"Split interactions: {len(train_interactions)} train, {len(val_interactions)} validation, {len(test_interactions)} test")
     
     # Create datasets
     train_dataset = RecommendationDataset(
@@ -310,7 +322,7 @@ def create_data_loaders(inputs: Inputs,
             pin_memory=torch.cuda.is_available()
         )
     
-    return train_loader, val_loader
+    return train_loader, val_loader, test_interactions, train_interactions
 
 
 def create_interactions_from_data_DEPRECATED(inputs: Inputs,
@@ -411,7 +423,7 @@ if __name__ == "__main__":
         interactions = load_interactions_from_input(inputs=inputs)
         
         # Create data loaders
-        train_loader, val_loader = create_data_loaders(
+        train_loader, val_loader, _, _ = create_data_loaders(
             inputs=inputs,
             interactions=interactions,
             train_split=0.8,
