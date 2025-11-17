@@ -155,15 +155,28 @@ def main():
         
         # Step 6: Create data loaders
         print("🔄 Creating data loaders...")
-        train_loader, val_loader = create_data_loaders(
+        train_loader, val_loader, test_interactions, train_interactions = create_data_loaders(
             inputs=inputs,
             interactions=interactions,
             train_split=config.get('train_split', 0.8),
             batch_size=config.get('batch_size', 32),
             negative_sampling_ratio=config.get('negative_sampling_ratio', 1.0),
-            seed=config.get('seed', 42)
+            seed=config.get('seed', 42),
+            test_split=0.05  # 5% for testing
         )
-        print(f"✅ Data loaders created - Train: {len(train_loader)} batches, Val: {len(val_loader)} batches")
+        print(f"✅ Data loaders created - Train: {len(train_loader)} batches, Val: {len(val_loader)} batches, Test: {len(test_interactions)} interactions")
+        
+        # Save test interactions and training interactions for evaluation
+        test_interactions_path = os.path.join(args.output_dir, f"{args.model_name}_test_interactions.json")
+        with open(test_interactions_path, 'w') as f:
+            json.dump(test_interactions, f, indent=2)
+        print(f"✅ Test interactions saved to {test_interactions_path}")
+        
+        # Save training interactions (to exclude from recommendations during evaluation)
+        train_interactions_path = os.path.join(args.output_dir, f"{args.model_name}_train_interactions.json")
+        with open(train_interactions_path, 'w') as f:
+            json.dump(train_interactions, f, indent=2)
+        print(f"✅ Training interactions saved to {train_interactions_path}")
         
         # Step 7: Train model
         print("🚀 Starting training...")
