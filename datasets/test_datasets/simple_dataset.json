@@ -1,0 +1,255 @@
+{
+  "user_data": [
+    {
+      "user_id": 1,
+      "categorical": {
+        "occupation": "software_engineer",
+        "location": "USA"
+      },
+      "continuous": {
+        "age": 28.0,
+        "salary": 95000.0
+      },
+      "temporal": {
+        "previous_liked_items": [1, 2, 3]
+      }
+    },
+    {
+      "user_id": 2,
+      "categorical": {
+        "occupation": "software_engineer",
+        "location": "Canada"
+      },
+      "continuous": {
+        "age": 32.0,
+        "salary": 105000.0
+      },
+      "temporal": {
+        "previous_liked_items": [2, 3, 4]
+      }
+    },
+    {
+      "user_id": 3,
+      "categorical": {
+        "occupation": "doctor",
+        "location": "USA"
+      },
+      "continuous": {
+        "age": 35.0,
+        "salary": 180000.0
+      },
+      "temporal": {
+        "previous_liked_items": [5, 6, 7]
+      }
+    },
+    {
+      "user_id": 4,
+      "categorical": {
+        "occupation": "doctor",
+        "location": "UK"
+      },
+      "continuous": {
+        "age": 40.0,
+        "salary": 200000.0
+      },
+      "temporal": {
+        "previous_liked_items": [6, 7, 8]
+      }
+    },
+    {
+      "user_id": 5,
+      "categorical": {
+        "occupation": "software_engineer",
+        "location": "Germany"
+      },
+      "continuous": {
+        "age": 26.0,
+        "salary": 88000.0
+      },
+      "temporal": {
+        "previous_liked_items": [1, 3, 4]
+      }
+    },
+    {
+      "user_id": 6,
+      "categorical": {
+        "occupation": "doctor",
+        "location": "Canada"
+      },
+      "continuous": {
+        "age": 38.0,
+        "salary": 190000.0
+      },
+      "temporal": {
+        "previous_liked_items": [5, 7, 8]
+      }
+    },
+    {
+      "user_id": 7,
+      "categorical": {
+        "occupation": "software_engineer",
+        "location": "France"
+      },
+      "continuous": {
+        "age": 30.0,
+        "salary": 92000.0
+      },
+      "temporal": {
+        "previous_liked_items": [2, 4]
+      }
+    },
+    {
+      "user_id": 8,
+      "categorical": {
+        "occupation": "doctor",
+        "location": "Australia"
+      },
+      "continuous": {
+        "age": 42.0,
+        "salary": 210000.0
+      },
+      "temporal": {
+        "previous_liked_items": [6, 8]
+      }
+    }
+  ],
+  "item_data": [
+    {
+      "item_id": 1,
+      "categorical": {
+        "category": "tech",
+        "brand": "TechCorp"
+      },
+      "continuous": {
+        "price": 99.99,
+        "rating": 4.5
+      },
+      "temporal": {
+        "view_counts": [10, 15, 20]
+      }
+    },
+    {
+      "item_id": 2,
+      "categorical": {
+        "category": "tech",
+        "brand": "TechCorp"
+      },
+      "continuous": {
+        "price": 149.99,
+        "rating": 4.7
+      },
+      "temporal": {
+        "view_counts": [12, 18, 25]
+      }
+    },
+    {
+      "item_id": 3,
+      "categorical": {
+        "category": "tech",
+        "brand": "TechCorp"
+      },
+      "continuous": {
+        "price": 199.99,
+        "rating": 4.6
+      },
+      "temporal": {
+        "view_counts": [8, 14, 22]
+      }
+    },
+    {
+      "item_id": 4,
+      "categorical": {
+        "category": "tech",
+        "brand": "TechCorp"
+      },
+      "continuous": {
+        "price": 79.99,
+        "rating": 4.4
+      },
+      "temporal": {
+        "view_counts": [15, 20, 28]
+      }
+    },
+    {
+      "item_id": 5,
+      "categorical": {
+        "category": "medical",
+        "brand": "MedCorp"
+      },
+      "continuous": {
+        "price": 299.99,
+        "rating": 4.8
+      },
+      "temporal": {
+        "view_counts": [5, 8, 12]
+      }
+    },
+    {
+      "item_id": 6,
+      "categorical": {
+        "category": "medical",
+        "brand": "MedCorp"
+      },
+      "continuous": {
+        "price": 349.99,
+        "rating": 4.9
+      },
+      "temporal": {
+        "view_counts": [6, 10, 15]
+      }
+    },
+    {
+      "item_id": 7,
+      "categorical": {
+        "category": "medical",
+        "brand": "MedCorp"
+      },
+      "continuous": {
+        "price": 399.99,
+        "rating": 4.7
+      },
+      "temporal": {
+        "view_counts": [4, 9, 14]
+      }
+    },
+    {
+      "item_id": 8,
+      "categorical": {
+        "category": "medical",
+        "brand": "MedCorp"
+      },
+      "continuous": {
+        "price": 249.99,
+        "rating": 4.6
+      },
+      "temporal": {
+        "view_counts": [7, 11, 16]
+      }
+    }
+  ],
+  "interactions": [
+    {"user_id": 1, "item_id": 1},
+    {"user_id": 1, "item_id": 2},
+    {"user_id": 1, "item_id": 3},
+    {"user_id": 2, "item_id": 2},
+    {"user_id": 2, "item_id": 3},
+    {"user_id": 2, "item_id": 4},
+    {"user_id": 3, "item_id": 5},
+    {"user_id": 3, "item_id": 6},
+    {"user_id": 3, "item_id": 7},
+    {"user_id": 4, "item_id": 6},
+    {"user_id": 4, "item_id": 7},
+    {"user_id": 4, "item_id": 8},
+    {"user_id": 5, "item_id": 1},
+    {"user_id": 5, "item_id": 3},
+    {"user_id": 5, "item_id": 4},
+    {"user_id": 6, "item_id": 5},
+    {"user_id": 6, "item_id": 7},
+    {"user_id": 6, "item_id": 8},
+    {"user_id": 7, "item_id": 2},
+    {"user_id": 7, "item_id": 4},
+    {"user_id": 8, "item_id": 6},
+    {"user_id": 8, "item_id": 8}
+  ]
+}
+
