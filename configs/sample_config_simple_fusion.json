@@ -57,7 +57,7 @@
   "negative_sampling_ratio": 1.0,
   "seed": 42,
   
-  "num_epochs": 25,
+  "num_epochs": 10,
   "learning_rate": 0.001,
   "optimizer_type": "adam",
   "scheduler_type": "cosine",

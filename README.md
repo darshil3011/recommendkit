@@ -30,7 +30,8 @@ recommendkit/
 ├── classifier/                       # Classification heads and loss functions
 ├── trainer/                          # Training pipeline and data loading
 ├── train.py                          # Main training script
-└── inference.py                      # Inference script
+├── inference.py                      # Inference script
+└── quickstart.ipynb                  # Interactive quickstart notebook
 ```
 
 ## 📊 Simple Data Format
@@ -75,6 +76,22 @@ The system automatically handles positive and negative sample generation:
 - **No Data Leakage**: Ensures users don't see items they've already interacted with in negative samples
 
 ## 🚀 Quick Start
+
+### 📓 Interactive Quickstart Notebook (Recommended for Beginners)
+
+The easiest way to get started is with our interactive Jupyter notebook that walks you through the entire process:
+
+```bash
+jupyter notebook quickstart.ipynb
+```
+
+The notebook covers:
+- **Data Loading**: Load and explore user and item features with sample data points
+- **Configuration**: Understand SimpleFusion config parameters
+- **Model Training**: Train a recommendation model step-by-step
+- **Inference**: Generate personalized recommendations directly in the notebook
+
+Perfect for learning how RecommendKit works! 🎓
 
 ### Generate Synthetic Dataset (Optional)
 

@@ -71,9 +71,32 @@ class SimpleFusionLayer(nn.Module):
         concatenated = torch.cat(features_list, dim=1)
         
         # Initialize projection if needed
-        if not self._projection_initialized:
+        # CRITICAL: Only initialize if projection doesn't exist AND flag is False
+        # If projection exists (from checkpoint), we should NOT re-initialize it
+        if self.projection is None and not self._projection_initialized:
             num_features = len(features_list)
             self._initialize_projection(num_features)
+        elif self.projection is not None and not self._projection_initialized:
+            # Projection exists but flag is False (loaded from checkpoint)
+            # Set flag to True to prevent future re-initialization attempts
+            self._projection_initialized = True
+        
+        # Verify input dimension matches projection's expected input
+        if self.projection is not None:
+            expected_input_dim = self.projection[0].weight.shape[1]  # Get input dim from first Linear layer
+            actual_input_dim = concatenated.shape[1]
+            if actual_input_dim != expected_input_dim:
+                expected_num_features = expected_input_dim // self.embedding_dim
+                actual_num_features = actual_input_dim // self.embedding_dim
+                feature_names = sorted(feature_embeddings.keys())
+                raise RuntimeError(
+                    f"Feature dimension mismatch in SimpleFusionLayer: "
+                    f"Expected {expected_input_dim} input dimensions ({expected_num_features} features from checkpoint), "
+                    f"but got {actual_input_dim} dimensions ({actual_num_features} features from current input). "
+                    f"\nCurrent features being used: {feature_names} "
+                    f"\nPlease ensure the same features are provided during inference as during training. "
+                    f"You may need to exclude one of these features to match the training configuration."
+                )
         
         # Project to target dimension
         fused = self.projection(concatenated)  # [batch_size, embedding_dim]
