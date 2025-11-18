@@ -9,6 +9,7 @@ import pytest
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from input_processor import Inputs
+from trainer.data_loader import load_interactions_from_input
 
 
 @pytest.fixture(scope="session")
@@ -29,12 +30,14 @@ def small_dataset(inputs, max_users=50, max_items=50):
     """Create a small subset of the dataset for testing"""
     user_data = inputs.get_user_data()
     item_data = inputs.get_item_data()
-    interactions = inputs.get_interactions()
+    
+    # Convert interactions from dict format to tuples using the helper function
+    all_interactions = load_interactions_from_input(inputs)
     
     # Get unique user and item IDs from interactions
     user_ids = set()
     item_ids = set()
-    for user_id, item_id, label in interactions:
+    for user_id, item_id, label in all_interactions:
         user_ids.add(user_id)
         item_ids.add(item_id)
         if len(user_ids) >= max_users and len(item_ids) >= max_items:
@@ -48,7 +51,7 @@ def small_dataset(inputs, max_users=50, max_items=50):
     filtered_user_data = [u for u in user_data if u['user_id'] in user_ids]
     filtered_item_data = [i for i in item_data if i['item_id'] in item_ids]
     filtered_interactions = [
-        (u, i, l) for u, i, l in interactions
+        (u, i, l) for u, i, l in all_interactions
         if u in user_ids and i in item_ids
     ]
     
