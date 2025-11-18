@@ -14,7 +14,7 @@ print('🔍 MATRIX FACTORIZATION BASELINE TEST')
 print('='*70)
 
 # Load dataset
-with open('datasets/synthetic/simple_dataset.json', 'r') as f:
+with open('datasets/test_datasets/simple_dataset.json', 'r') as f:
     dataset = json.load(f)
 
 interactions = dataset['interactions']

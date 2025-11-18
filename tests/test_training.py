@@ -62,16 +62,16 @@ def test_training(inputs, small_dataset):
     )
     
     # Verify training completed
-    assert 'train_loss' in history, "Training did not produce loss history"
-    assert len(history['train_loss']) > 0, "Training loss history is empty"
+    assert 'train_losses' in history, "Training did not produce loss history"
+    assert len(history['train_losses']) > 0, "Training loss history is empty"
     
-    final_train_loss = history['train_loss'][-1]
+    final_train_loss = history['train_losses'][-1]
     assert isinstance(final_train_loss, (int, float)), "Train loss is not a number"
     assert final_train_loss >= 0, "Train loss should be non-negative"
     
     # Verify validation loss if validation loader exists
-    if val_loader and 'val_loss' in history:
-        assert len(history['val_loss']) > 0, "Validation loss history is empty"
-        final_val_loss = history['val_loss'][-1]
+    if val_loader and 'val_losses' in history:
+        assert len(history['val_losses']) > 0, "Validation loss history is empty"
+        final_val_loss = history['val_losses'][-1]
         assert isinstance(final_val_loss, (int, float)), "Val loss is not a number"
         assert final_val_loss >= 0, "Val loss should be non-negative"
