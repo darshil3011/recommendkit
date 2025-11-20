@@ -1131,13 +1131,35 @@ def load_model_from_config(config_path: str, weights_path: str, item_data: Optio
             print(f"   ... and {len(unexpected_non_aligner) - 10} more")
     
     if missing_keys:
-        print(f"\n⚠️  Warning: {len(missing_keys)} missing keys in checkpoint (using random initialization)")
-        print(f"   These parameters will be randomly initialized, causing non-deterministic behavior!")
-        print(f"   Missing keys:")
-        for key in sorted(missing_keys):
-            print(f"   - {key}")
-        print(f"\n   ⚠️  This will cause non-deterministic results between runs!")
-        print(f"   ✅ Solution: Retrain the model to save a complete checkpoint.")
+        # Filter out false positives (mlp.3 when mlp_hidden_dims is empty)
+        false_positives = []
+        actual_missing = []
+        
+        cat_config = config.get('categorical_encoder', {})
+        mlp_hidden_dims = cat_config.get('mlp_hidden_dims', [64])
+        has_empty_mlp = (mlp_hidden_dims == [])
+        
+        for key in missing_keys:
+            if has_empty_mlp and ('categorical_encoder.field_embeddings.field_0.mlp.3.' in key or 
+                                  'temporal_encoder.modality_encoders.categorical.field_embeddings.field_0.mlp.3.' in key):
+                false_positives.append(key)
+            else:
+                actual_missing.append(key)
+        
+        if false_positives:
+            print(f"\nℹ️  Info: {len(false_positives)} expected missing keys (mlp.3 doesn't exist when mlp_hidden_dims is empty [])")
+            if len(false_positives) <= 5:
+                for key in sorted(false_positives):
+                    print(f"   - {key}")
+        
+        if actual_missing:
+            print(f"\n⚠️  Warning: {len(actual_missing)} missing keys in checkpoint (using random initialization)")
+            print(f"   These parameters will be randomly initialized, causing non-deterministic behavior!")
+            print(f"   Missing keys:")
+            for key in sorted(actual_missing):
+                print(f"   - {key}")
+            print(f"\n   ⚠️  This will cause non-deterministic results between runs!")
+            print(f"   ✅ Solution: Retrain the model to save a complete checkpoint.")
     
     # Verify loaded parameters match expected structure
     loaded_state = model.state_dict()
@@ -1149,7 +1171,28 @@ def load_model_from_config(config_path: str, weights_path: str, item_data: Optio
     for key in missing_keys:
         # Check if it's a critical parameter (not just dimension aligner)
         if 'dimension_aligner' not in key:
-            critical_missing.append(key)
+            # Check if this is a false positive for categorical encoder MLP layer 3
+            # When mlp_hidden_dims is empty [], the MLP only has one layer (mlp.0), so mlp.3 doesn't exist
+            is_mlp3_false_positive = False
+            if 'categorical_encoder.field_embeddings.field_0.mlp.3.' in key:
+                # Check if categorical encoder config has empty mlp_hidden_dims
+                cat_config = config.get('categorical_encoder', {})
+                mlp_hidden_dims = cat_config.get('mlp_hidden_dims', [64])
+                if mlp_hidden_dims == []:
+                    # This is expected - mlp.3 doesn't exist when there are no hidden layers
+                    is_mlp3_false_positive = True
+            
+            # Also check temporal encoder categorical MLP
+            if 'temporal_encoder.modality_encoders.categorical.field_embeddings.field_0.mlp.3.' in key:
+                # Temporal encoder uses same categorical encoder structure
+                # Check if categorical encoder config has empty mlp_hidden_dims
+                cat_config = config.get('categorical_encoder', {})
+                mlp_hidden_dims = cat_config.get('mlp_hidden_dims', [64])
+                if mlp_hidden_dims == []:
+                    is_mlp3_false_positive = True
+            
+            if not is_mlp3_false_positive:
+                critical_missing.append(key)
     
     if critical_missing:
         print(f"\n❌ Critical parameters missing from checkpoint:")

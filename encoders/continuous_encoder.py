@@ -189,8 +189,13 @@ class ContinuousEncoder(nn.Module):
         # LayerNorm destroys variation when num_features is small
         if self.normalize and num_features > 1:
             mean = feature_input.mean(dim=1, keepdim=True)
-            std = feature_input.std(dim=1, keepdim=True) + 1e-8
+            std = feature_input.std(dim=1, keepdim=True, unbiased=False) + 1e-8
             feature_input = (feature_input - mean) / std
+        elif self.normalize and num_features == 1:
+            # For single feature, just center it (subtract mean)
+            # Can't compute std with only 1 feature
+            mean = feature_input.mean(dim=1, keepdim=True)
+            feature_input = feature_input - mean
         
         # Pass through MLP
         embedding = self.mlp(feature_input)  # [1, embedding_dim]
@@ -259,9 +264,16 @@ class ContinuousEncoder(nn.Module):
         # Don't use LayerNorm here - it destroys variation for low-dim inputs
         if self.normalize:
             # Standardize each feature independently
+            # For batch_size=1, just center (subtract mean) without dividing by std
+            # For batch_size>1, use full standardization
             mean = feature_tensor.mean(dim=0, keepdim=True)
-            std = feature_tensor.std(dim=0, keepdim=True) + 1e-8
-            feature_tensor = (feature_tensor - mean) / std
+            feature_tensor = feature_tensor - mean
+            
+            if batch_size > 1:
+                # Only compute std if we have more than 1 sample
+                std = feature_tensor.std(dim=0, keepdim=True, unbiased=False) + 1e-8
+                feature_tensor = feature_tensor / std
+            # For batch_size=1, std would be 0, so we skip division (already centered)
         
         # Pass through MLP
         embeddings = self.mlp(feature_tensor)  # [batch_size, embedding_dim]

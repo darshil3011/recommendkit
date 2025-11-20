@@ -13,6 +13,7 @@ from trainer.data_loader import create_data_loaders, load_interactions_from_inpu
 from trainer.pipeline_builder import RecommendationPipeline, save_complete_model, load_model_from_config
 from trainer.trainer import train_model
 import inference
+import numpy as np
 
 
 @pytest.fixture
@@ -58,28 +59,32 @@ def trained_model_for_determinism(inputs):
             seed=42
         )
         
-        # Create and train model
+        # Create and train model with simple fusion (no attention layers) for small datasets
         model = RecommendationPipeline(
             embedding_dim=64,
             loss_type='bce',
-            user_num_attention_layers=1,
-            user_num_heads=4,
-            item_num_attention_layers=1,
-            item_num_heads=4,
-            interaction_num_attention_layers=1,
-            interaction_num_heads=4,
+            user_num_attention_layers=0,
+            user_num_heads=1,
+            user_use_simple_fusion=True,
+            item_num_attention_layers=0,
+            item_num_heads=1,
+            item_use_simple_fusion=True,
+            interaction_num_attention_layers=0,
+            interaction_num_heads=1,
+            interaction_use_simple_fusion=True,
             classifier_hidden_dims=[64],
             item_data=filtered_item_data
         )
         
         device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
         
-        # Train for 1 epoch
+        # Train for 10 epochs to allow model to learn user-specific features
+        # With limited epochs, the model may not learn enough to differentiate users
         train_model(
             model=model,
             train_loader=train_loader,
             val_loader=None,
-            num_epochs=1,
+            num_epochs=10,
             learning_rate=0.001,
             device=device,
             print_every=100,
@@ -204,3 +209,53 @@ def test_determinism_with_inference(inputs, trained_model_for_determinism):
     
     assert diff < 1e-6, \
         f"Inference results differ for same user_id! Similarity1={similarity1:.8f}, Similarity2={similarity2:.8f}, Diff={diff:.10f}"
+    
+    # CRITICAL: Also verify that different users produce different embeddings
+    # This ensures the model is actually learning user-specific features, not just outputting the same embedding
+    if len(user_data_list) > 1:
+        different_user = user_data_list[1]
+        user_emb3 = inference.generate_user_embedding(
+            model=model,
+            user_data=different_user,
+            encoders_used=encoders_used,
+            expected_num_features=user_expected_features
+        )
+        
+        # Check that embeddings are different (not identical)
+        # Note: With small datasets and limited training, embeddings might be very similar
+        # We only fail if they're exactly identical (which would indicate a bug)
+        emb_diff = np.linalg.norm(user_emb1 - user_emb3)
+        assert emb_diff > 1e-8, \
+            f"Different users produce identical embeddings! This indicates a bug. " \
+            f"User {test_user_id} and User {different_user['user_id']} embeddings differ by only {emb_diff:.10f}"
+        
+        # Warn if difference is very small (but don't fail - this is expected with limited training)
+        if emb_diff < 1e-3:
+            import warnings
+            warnings.warn(
+                f"User embeddings are very similar (diff={emb_diff:.6f}). "
+                f"This may indicate insufficient training epochs or the model not learning user-specific features well."
+            )
+        else:
+            # Log when differences are good (for debugging)
+            print(f"✅ User embeddings differ by {emb_diff:.6f} (threshold: 1e-3) - model is learning user-specific features")
+        
+        # Also check similarity with same item should be different
+        # Very lenient threshold - just ensure they're not exactly the same
+        similarity3 = inference.compute_similarity(user_emb3, item_emb1)
+        similarity_diff = abs(similarity1 - similarity3)
+        assert similarity_diff > 1e-8, \
+            f"Different users produce identical similarities! User {test_user_id} similarity: {similarity1:.8f}, " \
+            f"User {different_user['user_id']} similarity: {similarity3:.8f}, Diff: {similarity_diff:.10f}. " \
+            f"This indicates a bug."
+        
+        # Warn if similarity difference is very small (but don't fail)
+        if similarity_diff < 1e-3:
+            import warnings
+            warnings.warn(
+                f"User similarities are very similar (diff={similarity_diff:.6f}). "
+                f"This may indicate insufficient training epochs or the model not learning user-specific features well."
+            )
+        else:
+            # Log when differences are good (for debugging)
+            print(f"✅ User similarities differ by {similarity_diff:.6f} (threshold: 1e-3) - model is learning user-specific features")

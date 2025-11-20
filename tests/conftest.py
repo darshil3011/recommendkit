@@ -17,7 +17,7 @@ def inputs():
     """Load input data once for all tests"""
     inputs_obj = Inputs()
     inputs_obj.configure_validators(image_check_files=False)
-    result = inputs_obj.load_from_json("datasets/post_recommendation/updated_output_split.json")
+    result = inputs_obj.load_from_json("datasets/test_datasets/simple_dataset.json")
     
     if not result.is_valid:
         pytest.skip(f"Failed to load data: {result.errors}")

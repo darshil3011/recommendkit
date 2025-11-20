@@ -28,6 +28,7 @@ def generate_user_embedding(model, user_data, encoders_used=None, expected_num_f
         encoders_used: Dict indicating which encoders were used during training (optional)
         expected_num_features: Expected number of features (if None, use all available)
     """
+    # Ensure model is in eval mode
     model.eval()
     with torch.no_grad():
         # Prepare user features (only include features for encoders that were used during training)
@@ -131,6 +132,14 @@ def generate_user_embedding(model, user_data, encoders_used=None, expected_num_f
         # Generate user embedding
         user_embedding = model.user_generator(user_encoded, user_feature_types)
         
+        # Check for NaN or Inf values
+        if torch.any(torch.isnan(user_embedding)) or torch.any(torch.isinf(user_embedding)):
+            raise ValueError(f"User embedding contains NaN or Inf values. Encoded features: {list(user_encoded.keys())}")
+        
+        # Check for zero embedding
+        if torch.allclose(user_embedding, torch.zeros_like(user_embedding), atol=1e-8):
+            raise ValueError(f"User embedding is all zeros. This may indicate a model issue.")
+        
         return user_embedding.squeeze().cpu().numpy()
 
 
@@ -143,6 +152,7 @@ def generate_item_embedding(model, item_data, encoders_used=None, expected_num_f
         encoders_used: Dict indicating which encoders were used during training (optional)
         expected_num_features: Expected number of features (if None, use all available)
     """
+    # Ensure model is in eval mode
     model.eval()
     with torch.no_grad():
         # Prepare item features (only include features for encoders that were used during training)
@@ -250,6 +260,14 @@ def generate_item_embedding(model, item_data, encoders_used=None, expected_num_f
         # Generate item embedding
         item_embedding = model.item_generator(item_encoded, item_feature_types)
         
+        # Check for NaN or Inf values
+        if torch.any(torch.isnan(item_embedding)) or torch.any(torch.isinf(item_embedding)):
+            raise ValueError(f"Item embedding contains NaN or Inf values. Encoded features: {list(item_encoded.keys())}")
+        
+        # Check for zero embedding
+        if torch.allclose(item_embedding, torch.zeros_like(item_embedding), atol=1e-8):
+            raise ValueError(f"Item embedding is all zeros. This may indicate a model issue.")
+        
         return item_embedding.squeeze().cpu().numpy()
 
 
@@ -259,12 +277,30 @@ def compute_similarity(user_embedding, item_embedding):
     user_flat = user_embedding.flatten()
     item_flat = item_embedding.flatten()
     
-    # Normalize embeddings
-    user_norm = user_flat / np.linalg.norm(user_flat)
-    item_norm = item_flat / np.linalg.norm(item_flat)
+    # Check for NaN or inf values
+    if np.any(np.isnan(user_flat)) or np.any(np.isinf(user_flat)):
+        raise ValueError(f"User embedding contains NaN or Inf values: {user_flat}")
+    if np.any(np.isnan(item_flat)) or np.any(np.isinf(item_flat)):
+        raise ValueError(f"Item embedding contains NaN or Inf values: {item_flat}")
+    
+    # Normalize embeddings with epsilon to prevent division by zero
+    user_norm_val = np.linalg.norm(user_flat)
+    item_norm_val = np.linalg.norm(item_flat)
+    
+    if user_norm_val < 1e-8:
+        raise ValueError(f"User embedding has zero norm: {user_flat}")
+    if item_norm_val < 1e-8:
+        raise ValueError(f"Item embedding has zero norm: {item_flat}")
+    
+    user_norm = user_flat / user_norm_val
+    item_norm = item_flat / item_norm_val
     
     # Compute cosine similarity
     similarity = np.dot(user_norm, item_norm)
+    
+    # Clamp to valid range (should be [-1, 1] but numerical errors can cause slight overflow)
+    similarity = np.clip(similarity, -1.0, 1.0)
+    
     return similarity
 
 

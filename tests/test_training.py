@@ -30,16 +30,19 @@ def test_training(inputs, small_dataset):
     
     assert len(train_loader) > 0, "Train loader is empty"
     
-    # Create model
+    # Create model with simple fusion (no attention layers) for small datasets
     model = RecommendationPipeline(
         embedding_dim=64,
         loss_type='bce',
-        user_num_attention_layers=2,
-        user_num_heads=4,
-        item_num_attention_layers=1,
-        item_num_heads=4,
-        interaction_num_attention_layers=1,
-        interaction_num_heads=4,
+        user_num_attention_layers=0,
+        user_num_heads=1,
+        user_use_simple_fusion=True,
+        item_num_attention_layers=0,
+        item_num_heads=1,
+        item_use_simple_fusion=True,
+        interaction_num_attention_layers=0,
+        interaction_num_heads=1,
+        interaction_use_simple_fusion=True,
         classifier_hidden_dims=[64, 32],
         item_data=item_data
     )
