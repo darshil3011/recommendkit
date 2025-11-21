@@ -146,7 +146,8 @@ class CategoricalEncoder(nn.Module):
         self.aggregation_strategy = aggregation_strategy
         self.hash_vocab_size = hash_vocab_size
         self.embedding_dim = embedding_dim
-        self.mlp_hidden_dims = mlp_hidden_dims or [64]
+        # CRITICAL: Use 'is not None' check, not 'or', to preserve empty lists []
+        self.mlp_hidden_dims = mlp_hidden_dims if mlp_hidden_dims is not None else [64]
         self.dropout = dropout
         self.activation = activation
         self.hash_seed = hash_seed
