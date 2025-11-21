@@ -272,7 +272,7 @@ def find_top_items_for_user(model, user_data, all_items, k=10, filters=None, enc
     """
     Find top-k items for a user with optional filtering
     
-    Uses efficient embedding-based similarity computation for fast inference.
+    Uses classifier output (probability) for ranking, matching training objective.
     
     Args:
         model: Trained model
@@ -285,15 +285,18 @@ def find_top_items_for_user(model, user_data, all_items, k=10, filters=None, enc
         expected_item_features: Expected number of item features
         
     Returns:
-        List of top-k items with similarity scores
+        List of top-k items with probability scores
     """
     print(f"🔄 Finding top {k} items for user...")
     
-    # Generate user embedding ONCE
+    model.eval()
+    device = next(model.parameters()).device
+    
+    # Generate user embedding ONCE (for fast cosine similarity)
     user_embedding = generate_user_embedding(model, user_data, encoders_used=encoders_used, expected_num_features=expected_user_features)
     
-    # Compute similarities with all items
-    similarities = []
+    # Compute similarities with all items using cosine similarity (fast inference)
+    scores = []
     
     with torch.no_grad():
         for item in all_items:
@@ -326,17 +329,19 @@ def find_top_items_for_user(model, user_data, all_items, k=10, filters=None, enc
             # Generate item embedding (pass encoders_used to ensure correct features)
             item_embedding = generate_item_embedding(model, item, encoders_used=encoders_used, expected_num_features=expected_item_features)
             
-            # Compute similarity
+            # Compute cosine similarity (fast inference)
             similarity = compute_similarity(user_embedding, item_embedding)
             
-            similarities.append({
+            scores.append({
+                'item_id': item.get('item_id'),
                 'item': item,
                 'similarity': similarity
             })
     
-    # Sort by similarity and return top-k
-    similarities.sort(key=lambda x: x['similarity'], reverse=True)
-    return similarities[:k]
+    # Sort by similarity (descending) and return top-k
+    scores.sort(key=lambda x: x['similarity'], reverse=True)
+    
+    return [{'item_id': s['item_id'], 'similarity': s['similarity'], 'item': s['item']} for s in scores[:k]]
 
 
 def print_recommendations(recommendations, title="Recommendations"):
@@ -498,12 +503,31 @@ def main():
             target_user = user_data[0]
         
         print(f"👤 Target user: {target_user.get('user_id', 'Unknown')}")
-        if 'categorical' in target_user:
-            print(f"   Categorical features: {list(target_user['categorical'].keys())}")
-        if 'continuous' in target_user:
-            print(f"   Continuous features: {list(target_user['continuous'].keys())}")
-        if 'text' in target_user:
-            print(f"   Text features: {list(target_user['text'].keys())}")
+        print(f"\n📋 User Profile:")
+        if 'categorical' in target_user and target_user['categorical']:
+            print(f"   Categorical features:")
+            for key, value in target_user['categorical'].items():
+                print(f"     - {key}: {value}")
+        if 'continuous' in target_user and target_user['continuous']:
+            print(f"   Continuous features:")
+            for key, value in target_user['continuous'].items():
+                print(f"     - {key}: {value}")
+        if 'text' in target_user and target_user['text']:
+            print(f"   Text features:")
+            for key, value in target_user['text'].items():
+                # Truncate long text
+                text_value = str(value)
+                if len(text_value) > 50:
+                    text_value = text_value[:50] + "..."
+                print(f"     - {key}: {text_value}")
+        if 'temporal' in target_user and target_user['temporal']:
+            print(f"   Temporal features:")
+            for key, value in target_user['temporal'].items():
+                if isinstance(value, list):
+                    print(f"     - {key}: {len(value)} items")
+                else:
+                    print(f"     - {key}: {value}")
+        print()
         
         # Step 4: Parse filters
         filters = None

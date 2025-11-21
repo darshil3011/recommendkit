@@ -13,8 +13,9 @@ import numpy as np
 from typing import Dict, List, Any, Optional, Tuple
 from tqdm import tqdm
 
-# Add current directory to path for imports
-sys.path.append(os.path.dirname(os.path.abspath(__file__)))
+# Add project root to path for imports
+project_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+sys.path.insert(0, project_root)
 
 from input_processor import Inputs
 from trainer.pipeline_builder import load_model_from_config
@@ -59,12 +60,28 @@ def evaluate_classification(
     model.eval()
     
     # Create dataset and dataloader (same as training)
-    test_dataset = RecommendationDataset(
-        inputs=inputs,
-        interactions=test_interactions,
-        negative_sampling_ratio=0.0,  # Don't add negative samples, use only test interactions
-        seed=42
-    )
+    # CRITICAL: Test set must have negative samples for proper evaluation
+    # If test_interactions only has positives, we need to add negatives
+    positive_count = sum(1 for _, _, label in test_interactions if label == 1)
+    negative_count = sum(1 for _, _, label in test_interactions if label == 0)
+    
+    if negative_count == 0:
+        print(f"⚠️  WARNING: Test set has {positive_count} positive samples but 0 negative samples!")
+        print(f"   Adding negative samples for proper evaluation (ratio 1:1)...")
+        # Generate negative samples for test set
+        test_dataset = RecommendationDataset(
+            inputs=inputs,
+            interactions=test_interactions,
+            negative_sampling_ratio=1.0,  # Add negative samples to match positives
+            seed=42
+        )
+    else:
+        test_dataset = RecommendationDataset(
+            inputs=inputs,
+            interactions=test_interactions,
+            negative_sampling_ratio=0.0,  # Use existing negatives
+            seed=42
+        )
     
     test_loader = DataLoader(
         test_dataset,

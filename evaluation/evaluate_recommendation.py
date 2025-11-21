@@ -14,8 +14,9 @@ import numpy as np
 from typing import Dict, List, Any, Optional, Set
 from tqdm import tqdm
 
-# Add current directory to path for imports
-sys.path.append(os.path.dirname(os.path.abspath(__file__)))
+# Add project root to path for imports
+project_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+sys.path.insert(0, project_root)
 
 from input_processor import Inputs
 from trainer.pipeline_builder import load_model_from_config
