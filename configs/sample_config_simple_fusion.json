@@ -5,8 +5,6 @@
   "user_num_attention_layers": 0,
   "user_num_heads": 1,
   "user_dropout": 0.0,
-  "user_use_cls_token": false,
-  "user_use_layer_norm": false,
   "user_use_simple_fusion": true,
   
   "item_num_attention_layers": 0,
@@ -24,9 +22,11 @@
   
   "text_encoder_config": {
     "model_name": "glove-wiki-gigaword-50",
-    "aggregation_strategy": "mean",
+    "aggregation_strategy": "separate_concat",
+    "max_length": 128,
+    "num_text_fields": 2,
     "embedding_dim": 64,
-    "num_text_fields": 2
+    "freeze_bert": false
   },
   
   "categorical_encoder_config": {
@@ -44,12 +44,24 @@
     "normalize": true
   },
   
-  "image_encoder_config": null,
+  "image_encoder_config": {
+    "aggregation_strategy": "average",
+    "model_type": "cnn",
+    "num_image_fields": 2,
+    "embedding_dim": 64
+  },
   
   "temporal_encoder_config": {
     "enable_item_lookup": true,
     "aggregation_strategy": "mean_pooling",
-    "output_dim": 64
+    "output_dim": 64,
+    "item_embedding_dim": 128,
+    "lstm_hidden_dim": 128,
+    "lstm_num_layers": 2,
+    "lstm_dropout": 0.1,
+    "bidirectional": false,
+    "max_sequence_length": 50,
+    "missing_item_strategy": "zero"
   },
   
   "train_split": 0.8,
