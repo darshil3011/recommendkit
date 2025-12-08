@@ -1,0 +1,76 @@
+{
+  "embedding_dim": 64,
+  "loss_type": "bce",
+  
+  "user_num_attention_layers": 0,
+  "user_num_heads": 1,
+  "user_dropout": 0.0,
+  "user_use_cls_token": false,
+  "user_use_layer_norm": false,
+  "user_use_simple_fusion": true,
+  
+  "item_num_attention_layers": 0,
+  "item_num_heads": 1,
+  "item_dropout": 0.0,
+  "item_use_simple_fusion": true,
+  
+  "interaction_num_attention_layers": 0,
+  "interaction_num_heads": 1,
+  "interaction_dropout": 0.0,
+  "interaction_use_simple_fusion": true,
+  
+  "classifier_hidden_dims": [64],
+  "classifier_dropout": 0.1,
+  
+  "text_encoder_config": {
+    "model_name": "glove-wiki-gigaword-50",
+    "aggregation_strategy": "separate_concat",
+    "max_length": 32,
+    "num_text_fields": 2,
+    "embedding_dim": 64,
+    "freeze_bert": false
+  },
+  
+  "categorical_encoder_config": {
+    "aggregation_strategy": "separate_concat",
+    "hash_vocab_size": 2048,
+    "embedding_dim": 64,
+    "num_categorical_fields": 3,
+    "mlp_hidden_dims": []
+  },
+  
+  "continuous_encoder_config": {
+    "embedding_dim": 64,
+    "hidden_dims": [],
+    "dropout": 0.0,
+    "normalize": true
+  },
+  
+  "image_encoder_config": null,
+  
+  "temporal_encoder_config": {
+    "enable_item_lookup": true,
+    "aggregation_strategy": "mean_pooling",
+    "output_dim": 64,
+    "item_embedding_dim": 64,
+    "lstm_hidden_dim": 64,
+    "lstm_num_layers": 1,
+    "lstm_dropout": 0.0,
+    "bidirectional": false,
+    "max_sequence_length": 20,
+    "missing_item_strategy": "zero"
+  },
+  
+  "train_split": 0.8,
+  "batch_size": 128,
+  "negative_sampling_ratio": 1.0,
+  "seed": 42,
+  
+  "num_epochs": 8,
+  "learning_rate": 0.001,
+  "optimizer_type": "adam",
+  "scheduler_type": "cosine",
+  "print_every": 1,
+  "model_name": "post_recommendation_model"
+}
+
