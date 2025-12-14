@@ -414,9 +414,12 @@ class RecommendationPipeline(nn.Module):
             # Filter enabled modalities to only include those with available features
             enabled_modalities = [mod for mod in enabled_modalities if mod in available_features]
         
+        # Allow temporal encoder creation even with no modalities - it will use default_item_embedding
+        # This is useful when items have no features but we still want to encode temporal sequences
         if not enabled_modalities:
-            print("Temporal encoder: No available modalities, skipping temporal encoder creation")
-            return None
+            print("Temporal encoder: No available modalities, will use default item embeddings")
+            # Set empty list for enabled_modalities - temporal encoder will handle this
+            enabled_modalities = []
         
         # Create temporal encoder with default config
         default_config = {

@@ -1,0 +1,17 @@
+{
+  "threshold": 0.5,
+  "batch_size": 32,
+  "metrics": {
+    "accuracy": 0.7354433272394881,
+    "precision": 0.7567917850555805,
+    "recall": 0.6938756855575868,
+    "f1": 0.7239693855654372,
+    "true_positives": 15182,
+    "false_positives": 4879,
+    "true_negatives": 17001,
+    "false_negatives": 6698,
+    "num_samples": 43760,
+    "positive_samples": 21880,
+    "negative_samples": 21880
+  }
+}
