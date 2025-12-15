@@ -1,62 +1,19 @@
+"""
+LSTM-based temporal encoder for sequential item interactions.
+"""
+
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
 from typing import Dict, List, Optional, Union, Any, Tuple, Set
-from enum import Enum
 import warnings
 
-
-class TemporalAggregationStrategy(Enum):
-    """Supported aggregation strategies for LSTM outputs"""
-    LAST_HIDDEN = "last_hidden"        # Use last hidden state
-    MEAN_POOLING = "mean_pooling"      # Average all hidden states
-    MAX_POOLING = "max_pooling"        # Max pool all hidden states
-    ATTENTION = "attention"            # Attention over hidden states
-
-
-class ModalityType(Enum):
-    """Types of modalities to encode from items"""
-    IMAGE = "image"
-    TEXT = "text"
-    CATEGORICAL = "categorical"
-    CONTINUOUS = "continuous"
-
-
-class ItemLookupInterface:
-    """
-    Abstract interface for looking up item features
-    Users must implement this to provide item data
-    """
-    
-    def get_item_features(self, item_id: Union[str, int]) -> Dict[str, Any]:
-        """
-        Get features for a specific item
-        
-        Args:
-            item_id: ID of the item to lookup
-            
-        Returns:
-            Dictionary containing item features:
-            {
-                'image': {'main_image': '/path/to/image.jpg', ...},
-                'text': {'title': 'Product Title', 'description': '...'},
-                'categorical': {'category': 'electronics', 'brand': 'Apple'},
-                'continuous': {'price': 99.99, 'rating': 4.5}
-            }
-        """
-        raise NotImplementedError("Users must implement this method")
-    
-    def batch_get_item_features(self, item_ids: List[Union[str, int]]) -> List[Dict[str, Any]]:
-        """
-        Get features for multiple items (can be optimized for batch retrieval)
-        
-        Args:
-            item_ids: List of item IDs
-            
-        Returns:
-            List of feature dictionaries in the same order as item_ids
-        """
-        return [self.get_item_features(item_id) for item_id in item_ids]
+from .base_temporal_encoder import (
+    BaseTemporalEncoder,
+    TemporalAggregationStrategy,
+    ModalityType,
+    ItemLookupInterface
+)
 
 
 class AttentionPooling(nn.Module):
@@ -95,9 +52,9 @@ class AttentionPooling(nn.Module):
         return attended_output
 
 
-class TemporalEncoder(nn.Module):
+class LSTMTemporalEncoder(BaseTemporalEncoder):
     """
-    Temporal encoder for sequential item interactions
+    LSTM-based temporal encoder for sequential item interactions
     
     Args:
         item_lookup: Interface for looking up item features
@@ -108,7 +65,7 @@ class TemporalEncoder(nn.Module):
         lstm_num_layers: Number of LSTM layers
         lstm_dropout: LSTM dropout (applied if num_layers > 1)
         bidirectional: Whether to use bidirectional LSTM
-        output_dim: Final output dimension
+        embedding_dim: Final output dimension
         max_sequence_length: Maximum sequence length (for padding/truncation)
         missing_item_strategy: How to handle missing items ('zero', 'skip', 'previous')
     """
@@ -122,24 +79,17 @@ class TemporalEncoder(nn.Module):
                  lstm_num_layers: int = 2,
                  lstm_dropout: float = 0.1,
                  bidirectional: bool = False,
-                 output_dim: int = 256,
+                 embedding_dim: int = 256,
                  max_sequence_length: int = 50,
                  missing_item_strategy: str = 'zero'):
         
-        super().__init__()
-        
-        # Convert string arguments to enums
-        if isinstance(aggregation_strategy, str):
-            aggregation_strategy = TemporalAggregationStrategy(aggregation_strategy.lower())
+        super().__init__(embedding_dim, aggregation_strategy, max_sequence_length)
         
         self.item_lookup = item_lookup
         self.modality_encoders = nn.ModuleDict()
-        self.aggregation_strategy = aggregation_strategy
         self.lstm_hidden_dim = lstm_hidden_dim
         self.lstm_num_layers = lstm_num_layers
         self.bidirectional = bidirectional
-        self.output_dim = output_dim
-        self.max_sequence_length = max_sequence_length
         self.missing_item_strategy = missing_item_strategy
         
         # Validate and set enabled modalities
@@ -181,7 +131,7 @@ class TemporalEncoder(nn.Module):
             self.attention_pooling = AttentionPooling(lstm_output_dim)
         
         # Final projection layer
-        self.projection = nn.Linear(lstm_output_dim, output_dim)
+        self.projection = nn.Linear(lstm_output_dim, embedding_dim)
         
         # For handling missing items
         self.register_buffer('default_item_embedding', torch.zeros(self.item_embedding_dim))
@@ -455,7 +405,7 @@ class TemporalEncoder(nn.Module):
         else:
             raise ValueError(f"Unsupported aggregation strategy: {self.aggregation_strategy}")
     
-    def forward(self, temporal_dict: Dict[str, Union[List[Union[str, int]], List[List[Union[str, int]]]]]) -> torch.Tensor:
+    def forward(self, temporal_dict: Dict[str, Union[List[Union[str, int]], List[List[Union[str, int]]]]]) -> Dict[str, torch.Tensor]:
         """
         Forward pass for temporal encoding
         
@@ -465,12 +415,13 @@ class TemporalEncoder(nn.Module):
                           Batched: {'prev_50_posts': [[34, 56], [123, 456], [789, 101]]}
         
         Returns:
-            Temporal embedding tensor of shape (batch_size, output_dim)
+            Dictionary with temporal features: {"temporal": torch.Tensor}
+            Shape: (batch_size, embedding_dim)
         """
         if not temporal_dict:
             # No temporal data, return zeros
             device = next(self.parameters()).device
-            return torch.zeros(1, self.output_dim, device=device)
+            return {"temporal": torch.zeros(1, self.embedding_dim, device=device)}
         
         # Check if this is batched input by examining the first field
         first_field_name = next(iter(temporal_dict.keys()))
@@ -480,9 +431,11 @@ class TemporalEncoder(nn.Module):
         is_batched = isinstance(first_field_value, list) and len(first_field_value) > 0 and isinstance(first_field_value[0], list)
         
         if is_batched:
-            return self._forward_batched(temporal_dict)
+            output = self._forward_batched(temporal_dict)
         else:
-            return self._forward_single(temporal_dict)
+            output = self._forward_single(temporal_dict)
+        
+        return {"temporal": output}
     
     def _forward_single(self, temporal_dict: Dict[str, List[Union[str, int]]]) -> torch.Tensor:
         """Process a single sample"""
@@ -494,7 +447,7 @@ class TemporalEncoder(nn.Module):
             if not item_ids:
                 # Empty sequence
                 device = next(self.parameters()).device
-                field_embedding = torch.zeros(1, self.output_dim, device=device)
+                field_embedding = torch.zeros(1, self.embedding_dim, device=device)
             else:
                 # Encode item sequence
                 seq_embeddings, seq_mask = self._encode_item_sequence(item_ids)
@@ -510,7 +463,7 @@ class TemporalEncoder(nn.Module):
                 aggregated = self._apply_aggregation(lstm_outputs, seq_mask)  # (1, lstm_output_dim)
                 
                 # Final projection
-                field_embedding = self.projection(aggregated)  # (1, output_dim)
+                field_embedding = self.projection(aggregated)  # (1, embedding_dim)
             
             field_embeddings.append(field_embedding)
         
@@ -519,8 +472,8 @@ class TemporalEncoder(nn.Module):
         else:
             # Multiple temporal fields - take mean for now
             # Could be made configurable (concat, attention, etc.)
-            stacked_embeddings = torch.stack(field_embeddings, dim=1)  # (1, num_fields, output_dim)
-            return stacked_embeddings.mean(dim=1)  # (1, output_dim)
+            stacked_embeddings = torch.stack(field_embeddings, dim=1)  # (1, num_fields, embedding_dim)
+            return stacked_embeddings.mean(dim=1)  # (1, embedding_dim)
     
     def _forward_batched(self, temporal_dict: Dict[str, List[List[Union[str, int]]]]) -> torch.Tensor:
         """Process a batch of samples"""
@@ -540,213 +493,5 @@ class TemporalEncoder(nn.Module):
             batch_embeddings.append(sample_embedding)
         
         # Stack all samples
-        return torch.cat(batch_embeddings, dim=0)  # (batch_size, output_dim)
-    
-    def get_output_dim(self) -> int:
-        """Get the output embedding dimension"""
-        return self.output_dim
+        return torch.cat(batch_embeddings, dim=0)  # (batch_size, embedding_dim)
 
-
-# Factory function
-def create_temporal_encoder(item_lookup: ItemLookupInterface,
-                           modality_encoders: Dict[str, nn.Module],
-                           enabled_modalities: List[str] = None,
-                           aggregation_strategy: str = "last_hidden",
-                           lstm_hidden_dim: int = 128,
-                           lstm_num_layers: int = 2,
-                           lstm_dropout: float = 0.1,
-                           bidirectional: bool = False,
-                           output_dim: int = 256,
-                           max_sequence_length: int = 50,
-                           missing_item_strategy: str = 'zero') -> TemporalEncoder:
-    """
-    Factory function to create a TemporalEncoder
-    
-    Args:
-        item_lookup: Interface for looking up item features
-        modality_encoders: Dict mapping modality names to encoder modules
-        enabled_modalities: List of modalities to use ('image', 'text', 'categorical', 'continuous')
-        aggregation_strategy: 'last_hidden', 'mean_pooling', 'max_pooling', 'attention'
-        lstm_hidden_dim: LSTM hidden dimension
-        lstm_num_layers: Number of LSTM layers
-        lstm_dropout: LSTM dropout
-        bidirectional: Whether to use bidirectional LSTM
-        output_dim: Final output dimension
-        max_sequence_length: Maximum sequence length
-        missing_item_strategy: How to handle missing items ('zero', 'skip', 'previous')
-        
-    Returns:
-        Configured TemporalEncoder instance
-    """
-    # Convert string keys to ModalityType enums
-    enum_encoders = {}
-    for mod_name, encoder in modality_encoders.items():
-        if mod_name == 'image':
-            enum_encoders[ModalityType.IMAGE] = encoder
-        elif mod_name == 'text':
-            enum_encoders[ModalityType.TEXT] = encoder
-        elif mod_name == 'categorical':
-            enum_encoders[ModalityType.CATEGORICAL] = encoder
-        elif mod_name == 'continuous':
-            enum_encoders[ModalityType.CONTINUOUS] = encoder
-    
-    # Convert enabled_modalities to enum set
-    enabled_enum_modalities = None
-    if enabled_modalities:
-        enabled_enum_modalities = set()
-        for mod_name in enabled_modalities:
-            if mod_name == 'image':
-                enabled_enum_modalities.add(ModalityType.IMAGE)
-            elif mod_name == 'text':
-                enabled_enum_modalities.add(ModalityType.TEXT)
-            elif mod_name == 'categorical':
-                enabled_enum_modalities.add(ModalityType.CATEGORICAL)
-            elif mod_name == 'continuous':
-                enabled_enum_modalities.add(ModalityType.CONTINUOUS)
-    
-    return TemporalEncoder(
-        item_lookup=item_lookup,
-        modality_encoders=enum_encoders,
-        enabled_modalities=enabled_enum_modalities,
-        aggregation_strategy=aggregation_strategy,
-        lstm_hidden_dim=lstm_hidden_dim,
-        lstm_num_layers=lstm_num_layers,
-        lstm_dropout=lstm_dropout,
-        bidirectional=bidirectional,
-        output_dim=output_dim,
-        max_sequence_length=max_sequence_length,
-        missing_item_strategy=missing_item_strategy
-    )
-
-
-# Example ItemLookup implementation
-class MockItemLookup(ItemLookupInterface):
-    """Mock implementation for testing purposes"""
-    
-    def __init__(self):
-        # Mock item database
-        self.item_db = {
-            34: {
-                'image': {'main_image': '/images/post34.jpg'},
-                'text': {'title': 'Tech Review', 'content': 'Great gadget review'},
-                'categorical': {'category': 'tech', 'sentiment': 'positive'},
-                'continuous': {'score': 4.5, 'engagement': 120}
-            },
-            56: {
-                'image': {'main_image': '/images/post56.jpg'},
-                'text': {'title': 'Travel Blog', 'content': 'Amazing vacation photos'},
-                'categorical': {'category': 'travel', 'sentiment': 'positive'},
-                'continuous': {'score': 4.8, 'engagement': 200}
-            },
-            7646: {
-                'image': {'main_image': '/images/post7646.jpg'},
-                'text': {'title': 'Food Recipe', 'content': 'Delicious pasta recipe'},
-                'categorical': {'category': 'food', 'sentiment': 'neutral'},
-                'continuous': {'score': 4.2, 'engagement': 95}
-            }
-        }
-    
-    def get_item_features(self, item_id: Union[str, int]) -> Dict[str, Any]:
-        """Get features for a specific item"""
-        item_id = int(item_id)
-        return self.item_db.get(item_id, {
-            'image': None,
-            'text': None,
-            'categorical': None,
-            'continuous': None
-        })
-
-
-# Example usage and testing
-if __name__ == "__main__":
-    print("Testing Temporal Encoder...")
-    
-    # Create mock components for testing
-    item_lookup = MockItemLookup()
-    
-    # Mock encoders (in practice, these would be your actual encoders)
-    class MockImageEncoder(nn.Module):
-        def __init__(self):
-            super().__init__()
-            self.embedding_dim = 128
-            self.linear = nn.Linear(1, 128)  # Dummy
-        
-        def forward_from_paths(self, paths_dict):
-            return torch.randn(1, 128)
-    
-    class MockTextEncoder(nn.Module):
-        def __init__(self):
-            super().__init__()
-            self.embedding_dim = 256
-        
-        def forward(self, text_dict):
-            return torch.randn(1, 256)
-    
-    class MockCategoricalEncoder(nn.Module):
-        def forward(self, cat_dict, batch_size=1):
-            return torch.randn(batch_size, 96)
-        
-        def get_output_dim(self, num_fields=3):
-            return 96
-    
-    # Test configurations
-    modality_encoders = {
-        'image': MockImageEncoder(),
-        'text': MockTextEncoder(),
-        'categorical': MockCategoricalEncoder()
-    }
-    
-    configs = [
-        {
-            'enabled_modalities': ['image', 'text'],
-            'aggregation_strategy': 'last_hidden',
-            'lstm_hidden_dim': 64,
-            'output_dim': 128
-        },
-        {
-            'enabled_modalities': ['categorical'],
-            'aggregation_strategy': 'attention',
-            'lstm_hidden_dim': 128,
-            'output_dim': 256
-        },
-        {
-            'enabled_modalities': ['image', 'text', 'categorical'],
-            'aggregation_strategy': 'mean_pooling',
-            'lstm_hidden_dim': 256,
-            'bidirectional': True,
-            'output_dim': 512
-        }
-    ]
-    
-    for i, config in enumerate(configs):
-        print(f"\n--- Configuration {i+1}: {config} ---")
-        
-        try:
-            # Create temporal encoder
-            temporal_encoder = create_temporal_encoder(
-                item_lookup=item_lookup,
-                modality_encoders=modality_encoders,
-                **config
-            )
-            
-            # Test with temporal data
-            temporal_data = {
-                'prev_50_posts': [34, 56, 7646, 342],  # 342 doesn't exist in mock DB
-                'recent_purchases': [56, 34]
-            }
-            
-            print(f"Enabled modalities: {config['enabled_modalities']}")
-            print(f"Output dimension: {temporal_encoder.get_output_dim()}")
-            
-            # Forward pass
-            with torch.no_grad():
-                output = temporal_encoder(temporal_data)
-                print(f"Input: {temporal_data}")
-                print(f"Output shape: {output.shape}")
-            
-        except Exception as e:
-            print(f"Error with configuration {config}: {e}")
-            import traceback
-            traceback.print_exc()
-    
-    print("\nTemporal encoder tests completed!")

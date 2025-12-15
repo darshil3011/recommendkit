@@ -25,7 +25,13 @@ recommendkit/
 │   └── synthetic/                    # Synthetic dataset generation
 │       ├── generate_correlated_dataset.py       # Dataset generator script
 │       └── correlated_dataset.json              # Generated dataset
-├── encoders/                         # Feature encoders (text, image, categorical, etc.)
+├── encoders/                         # Feature encoders (modular structure)
+│   ├── text/                        # Text encoders (transformer, word2vec)
+│   ├── image/                       # Image encoders (CNN, ViT)
+│   ├── categorical/                 # Categorical encoders (hash-based)
+│   ├── continuous/                  # Continuous encoders (MLP-based)
+│   └── base_encoder.py              # Base encoder class
+├── encoders/temporal_encoder.py     # Temporal/sequence encoder (user interaction history)
 ├── interaction/                      # Feature fusion and interaction modeling
 ├── classifier/                       # Classification heads and loss functions
 ├── trainer/                          # Training pipeline and data loading
@@ -291,25 +297,124 @@ See `configs/correlated_dataset_config.json` (SimpleFusion) and `configs/correla
 
 The system is designed for maximum extensibility:
 
-### **Bring Your Own Encoders**
-Plug-and-play architecture for custom feature encoders:
+### **Encoder Architecture**
 
-```python
-# Create custom encoder
-class MyCustomEncoder(nn.Module):
-    def __init__(self, input_dim, output_dim):
-        super().__init__()
-        self.encoder = nn.Linear(input_dim, output_dim)
-    
-    def forward(self, x):
-        return self.encoder(x)
+The system uses a modular encoder architecture organized by feature type:
 
-# Drop into pipeline
-pipeline.add_encoder('my_feature_type', MyCustomEncoder(128, 64))
+```
+encoders/
+├── text/              # Text feature encoders
+│   ├── transformer_encoder.py    # HuggingFace transformer models (BERT, RoBERTa, etc.)
+│   ├── word2vec_encoder.py      # Word2Vec/FastText/GloVe models
+│   ├── factory.py               # Auto-detects transformer vs word2vec from model_name
+│   └── base_text_encoder.py     # Base class for text encoders
+├── image/             # Image feature encoders
+│   ├── cnn_encoder.py           # CNN-based image encoder
+│   ├── vit_encoder.py           # Vision Transformer encoder
+│   ├── factory.py               # Creates encoder based on model_type config
+│   └── base_image_encoder.py    # Base class for image encoders
+├── categorical/       # Categorical feature encoders
+│   ├── hash_encoder.py         # Hash-based embedding encoder
+│   ├── factory.py               # Factory for categorical encoders
+│   └── base_categorical_encoder.py
+├── continuous/        # Continuous feature encoders
+│   ├── mlp_encoder.py           # MLP-based continuous encoder
+│   ├── factory.py               # Factory for continuous encoders
+│   └── base_continuous_encoder.py
+├── temporal/          # Temporal/sequence encoders
+│   ├── lstm_temporal_encoder.py  # LSTM-based temporal encoder (user interaction history)
+│   ├── factory.py               # Factory for temporal encoders
+│   └── base_temporal_encoder.py  # Base class for temporal encoders
+└── base_encoder.py    # Base class for all encoders
 ```
 
+**Key Features:**
+- **Factory Pattern**: Each encoder type has a factory function that creates encoders from config
+- **Auto-Detection**: Text encoders automatically detect transformer vs word2vec from `model_name`
+- **HuggingFace Support**: Text encoders support any HuggingFace model via `AutoModel`
+- **Modular Design**: Easy to add new encoder types or implementations
+
+### **Text Encoders**
+
+The text encoder factory automatically detects the encoder type based on the `model_name`:
+
+**Transformer Encoders** (any HuggingFace model):
+```json
+{
+  "text_encoder_config": {
+    "model_name": "bert-base-uncased",  // Any HF model name or path
+    "aggregation_strategy": "separate_concat",
+    "embedding_dim": 256,
+    "max_length": 512,
+    "pooling_strategy": "cls",
+    "freeze_bert": false
+  }
+}
+```
+
+Supported models:
+- Standard HF models: `"bert-base-uncased"`, `"distilbert-base-uncased"`, `"roberta-base"`
+- Sentence transformers: `"sentence-transformers/all-MiniLM-L6-v2"`
+- Custom paths: `"/path/to/local/model"` or `"username/model-name"`
+
+**Word2Vec Encoders** (detected automatically):
+```json
+{
+  "text_encoder_config": {
+    "model_name": "glove-wiki-gigaword-50",  // Auto-detected as word2vec
+    "aggregation_strategy": "mean",
+    "embedding_dim": 64
+  }
+}
+```
+
+### **Image Encoders**
+
+Choose between CNN or Vision Transformer:
+
+```json
+{
+  "image_encoder_config": {
+    "model_type": "vit",  // or "cnn"
+    "aggregation_strategy": "concat",
+    "embedding_dim": 256,
+    "pretrained": true,  // For ViT only
+    "num_cnn_layers": 3  // For CNN only
+  }
+}
+```
+
+### **Bring Your Own Encoders**
+
+To add a custom encoder:
+
+1. **Create encoder class** inheriting from the appropriate base class:
+```python
+from encoders.base_encoder import BaseEncoder
+
+class MyCustomEncoder(BaseEncoder):
+    def __init__(self, embedding_dim: int):
+        super().__init__(embedding_dim)
+        # Your encoder architecture
+    
+    def forward(self, input_data):
+        # Process input and return {"features": tensor}
+        return {"features": encoded_tensor}
+```
+
+2. **Add factory function** in the appropriate subdirectory:
+```python
+# encoders/mytype/factory.py
+def create_mytype_encoder(config: Dict[str, Any]):
+    return MyCustomEncoder(
+        embedding_dim=config.get('embedding_dim', 256)
+    )
+```
+
+3. **Integrate into pipeline** - the system will automatically detect and use it!
+
 ### **Modular Components**
-- **Feature Encoders**: `encoders/` - Add support for new data types (audio, video, graphs, etc.)
+- **Feature Encoders**: `encoders/` - Modular structure for text, image, categorical, continuous, temporal
 - **Fusion Layers**: `interaction/feature_fusion.py` - Custom feature combination strategies  
 - **Interaction Models**: `interaction/interaction_modeling.py` - User-item interaction architectures
 - **Classification Heads**: `classifier/` - Custom loss functions and output layers
