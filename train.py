@@ -18,20 +18,32 @@ from input_processor import Inputs
 from trainer.pipeline_builder import RecommendationPipeline, save_complete_model
 from trainer.data_loader import create_data_loaders, load_interactions_from_input
 from trainer.trainer import train_model
+from utils.config_validator import validate_config
 
 
 def create_model_from_config(config: Dict[str, Any], item_data: Optional[List[Dict[str, Any]]] = None) -> RecommendationPipeline:
     """
-    Create model from configuration dictionary
+    Create model from configuration dictionary and store the config for saving.
+    Validates config before creating model.
     
     Args:
         config: Model configuration dictionary
         item_data: Optional item data for temporal encoder (any dataset format)
         
     Returns:
-        RecommendationPipeline instance
+        RecommendationPipeline instance with stored config
+        
+    Raises:
+        ValueError: If config validation fails
     """
-    return RecommendationPipeline(
+    # Validate config first
+    validation_result = validate_config(config)
+    if not validation_result.is_valid:
+        raise ValueError(f"Config validation failed:\n{validation_result}")
+    if validation_result.warnings:
+        print(f"⚠️  Config validation warnings:\n{validation_result}")
+    
+    model = RecommendationPipeline(
         embedding_dim=config.get('embedding_dim', 256),
         loss_type=config.get('loss_type', 'bce'),
         
@@ -69,6 +81,12 @@ def create_model_from_config(config: Dict[str, Any], item_data: Optional[List[Di
         # Item data for temporal encoder
         item_data=item_data
     )
+    
+    # Store the config in the model AFTER creation so it can access encoder._actual_config
+    # This ensures we save the actual values used
+    model.set_config(config)
+    
+    return model
 
 
 def load_training_config(config_path: str) -> Dict[str, Any]:

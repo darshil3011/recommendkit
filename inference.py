@@ -292,10 +292,13 @@ def find_top_items_for_user(model, user_data, all_items, k=10, filters=None, enc
     model.eval()
     device = next(model.parameters()).device
     
-    # Generate user embedding ONCE (for fast cosine similarity)
+    # Generate user embedding ONCE
     user_embedding = generate_user_embedding(model, user_data, encoders_used=encoders_used, expected_num_features=expected_user_features)
     
-    # Compute similarities with all items using cosine similarity (fast inference)
+    # Convert user embedding to tensor once (for reuse)
+    user_emb_tensor = torch.from_numpy(user_embedding).unsqueeze(0).to(device)
+    
+    # Compute scores using the full model pipeline (matching training)
     scores = []
     
     with torch.no_grad():
@@ -329,16 +332,23 @@ def find_top_items_for_user(model, user_data, all_items, k=10, filters=None, enc
             # Generate item embedding (pass encoders_used to ensure correct features)
             item_embedding = generate_item_embedding(model, item, encoders_used=encoders_used, expected_num_features=expected_item_features)
             
-            # Compute cosine similarity (fast inference)
-            similarity = compute_similarity(user_embedding, item_embedding)
+            # Convert item embedding to tensor
+            item_emb_tensor = torch.from_numpy(item_embedding).unsqueeze(0).to(device)
+            
+            # Generate interaction embedding (matching training pipeline)
+            interaction_embedding = model.interaction_generator(user_emb_tensor, item_emb_tensor)
+            
+            # Get probability from classifier (matching training objective)
+            logits = model.classifier(interaction_embedding)
+            probability = torch.sigmoid(logits).item()
             
             scores.append({
                 'item_id': item.get('item_id'),
                 'item': item,
-                'similarity': similarity
+                'similarity': probability  # Actually probability, but keep name for compatibility
             })
     
-    # Sort by similarity (descending) and return top-k
+    # Sort by probability (descending) and return top-k
     scores.sort(key=lambda x: x['similarity'], reverse=True)
     
     return [{'item_id': s['item_id'], 'similarity': s['similarity'], 'item': s['item']} for s in scores[:k]]

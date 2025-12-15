@@ -15,15 +15,14 @@ sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 # Import all the modules we've built
 from input_processor import Inputs
-from encoders.image_encoder import create_image_encoder
-from encoders.text_encoder import create_text_encoder
-from encoders.categorical_encoder import create_categorical_encoder
-from encoders.continuous_encoder import create_continuous_encoder
-from encoders.temporal_encoder import create_temporal_encoder, ItemLookupInterface
+from encoders.image import create_image_encoder
+from encoders.text import create_text_encoder
+from encoders.categorical import create_categorical_encoder
+from encoders.continuous import create_continuous_encoder
+from encoders.temporal import create_temporal_encoder, ItemLookupInterface
 from interaction.feature_fusion import UserEmbeddingGenerator, ItemEmbeddingGenerator, AsymmetricTowerModel
 from interaction.interaction_modeling import InteractionEmbeddingGenerator
 from classifier.recommendation_classifier import RecommendationClassifier
-from encoders.continuous_encoder import create_continuous_encoder
 
 
 class GenericItemLookupInterface(ItemLookupInterface):
@@ -200,6 +199,9 @@ class RecommendationPipeline(nn.Module):
         self.item_data = item_data
         self.loss_type = loss_type
         
+        # Store original config for saving (will be set by create_model_from_config)
+        self._saved_config: Optional[Dict[str, Any]] = None
+        
         # User tower configuration
         self.user_num_attention_layers = user_num_attention_layers
         self.user_num_heads = user_num_heads
@@ -292,58 +294,55 @@ class RecommendationPipeline(nn.Module):
         
     def _create_image_encoder(self, config: Optional[Dict]):
         """Create image encoder with default config"""
+        if config is None:
+            return None
         default_config = {
             "aggregation_strategy": "average",
             "model_type": "cnn",
             "embedding_dim": self.embedding_dim,
             "num_image_fields": 2  # Default for most use cases
         }
-        if config:
-            default_config.update(config)
-        return create_image_encoder(**default_config)
+        default_config.update(config)
+        encoder = create_image_encoder(default_config)
+        encoder._actual_config = default_config.copy()
+        return encoder
     
     def _create_text_encoder(self, config: Optional[Dict]):
-        """Create text encoder with default config"""
+        """Create text encoder from config"""
         if config is None:
             return None
-            
-        default_config = {
-            "aggregation_strategy": "joint_encoding",
-            "model_name": "bert-base-uncased",  # Use full BERT by default
-            "embedding_dim": self.embedding_dim,
-            "max_length": 128,
-            "num_text_fields": 2,  # Default for most use cases
-            "freeze_bert": False  # Allow fine-tuning by default
-        }
-        default_config.update(config)
         
-        # Use regular text encoder for training
-        return create_text_encoder(
-            model_name=default_config["model_name"],
-            embedding_dim=default_config["embedding_dim"],
-            max_length=default_config["max_length"],
-            num_text_fields=default_config.get("num_text_fields", 1),
-            freeze_bert=default_config.get("freeze_bert", False)
-        )
+        # Ensure embedding_dim is set
+        if "embedding_dim" not in config:
+            config["embedding_dim"] = self.embedding_dim
+        
+        # Create encoder using factory (automatically detects transformer vs word2vec)
+        encoder = create_text_encoder(config)
+        
+        # Store actual config used for saving
+        encoder._actual_config = config.copy()
+        return encoder
     
     def _create_categorical_encoder(self, config: Optional[Dict]):
-        """Create categorical encoder with default config"""
-        default_config = {
-            "aggregation_strategy": "separate_concat",
-            "embedding_dim": self.embedding_dim,
-            "hash_vocab_size": 10000,
-            "num_categorical_fields": 3,  # Default for most use cases
-            "mlp_hidden_dims": [64]  # Default to match saved models
-        }
-        if config:
-            default_config.update(config)
-        # Ensure mlp_hidden_dims is always set (use from config or default)
-        # CRITICAL: Empty list [] is valid and means no hidden layers (just final projection)
-        # Only use default if mlp_hidden_dims is missing or None
-        if "mlp_hidden_dims" not in default_config or default_config["mlp_hidden_dims"] is None:
-            default_config["mlp_hidden_dims"] = [64]
-        # If it's an empty list, keep it as is (means no hidden layers)
-        return create_categorical_encoder(**default_config)
+        """Create categorical encoder from config (no defaults - config must be explicit)"""
+        if config is None:
+            return None
+        
+        # mlp_hidden_dims is required - validation should catch this, but double-check
+        if "mlp_hidden_dims" not in config:
+            raise ValueError(
+                "categorical_encoder_config: 'mlp_hidden_dims' is required. "
+                "Specify explicitly (use [] for no hidden layers)."
+            )
+        
+        # Ensure embedding_dim is set
+        if "embedding_dim" not in config:
+            config["embedding_dim"] = self.embedding_dim
+        
+        # Store the actual config used for saving
+        encoder = create_categorical_encoder(config)
+        encoder._actual_config = config.copy()
+        return encoder
     
     def _create_continuous_encoder(self, config: Optional[Dict]):
         """Create continuous encoder with default config"""
@@ -354,7 +353,10 @@ class RecommendationPipeline(nn.Module):
         }
         if config:
             default_config.update(config)
-        return create_continuous_encoder(**default_config)
+        encoder = create_continuous_encoder(default_config)
+        # Store the actual config used (with defaults applied) for saving
+        encoder._actual_config = default_config.copy()
+        return encoder
     
     def _create_temporal_encoder(self, config: Optional[Dict]):
         """Create temporal encoder with optional item lookup for any dataset"""
@@ -568,124 +570,77 @@ class RecommendationPipeline(nn.Module):
         """Get binary predictions for inference"""
         probabilities = self.predict_proba(user_data, item_data)
         return (probabilities > threshold).float()
-
-
-def extract_model_config(model: RecommendationPipeline) -> dict:
-    """
-    Extract complete model configuration for saving and inference
     
-    Args:
-        model: Trained RecommendationPipeline instance
+    def get_config(self) -> Optional[Dict[str, Any]]:
+        """
+        Get the stored configuration for this model.
+        Returns None if config was not stored (e.g., model created manually without config).
         
-    Returns:
-        Dictionary containing all model configuration parameters
-    """
-    config = {
-        'embedding_dim': model.embedding_dim,
-        'loss_type': getattr(model, 'loss_type', 'bce'),
-        
-        # User tower configuration
-        'user_num_attention_layers': getattr(model, 'user_num_attention_layers', 0),
-        'user_num_heads': getattr(model, 'user_num_heads', 1),
-        'user_dropout': getattr(model, 'user_dropout', 0.1),
-        'user_use_simple_fusion': getattr(model, 'user_use_simple_fusion', True),
-        
-        # Item tower configuration
-        'item_num_attention_layers': getattr(model, 'item_num_attention_layers', 0),
-        'item_num_heads': getattr(model, 'item_num_heads', 1),
-        'item_dropout': getattr(model, 'item_dropout', 0.1),
-        'item_use_simple_fusion': getattr(model, 'item_use_simple_fusion', True),
-        
-        # Interaction modeling configuration
-        'interaction_num_attention_layers': getattr(model, 'interaction_num_attention_layers', 0),
-        'interaction_num_heads': getattr(model, 'interaction_num_heads', 1),
-        'interaction_dropout': getattr(model, 'interaction_dropout', 0.1),
-        'interaction_use_simple_fusion': getattr(model, 'interaction_use_simple_fusion', True),
-        
-        # Classifier configuration
-        'classifier_hidden_dims': getattr(model, 'classifier_hidden_dims', [16]),
-        'classifier_dropout': getattr(model, 'classifier_dropout', 0.1),
-        
-        # Encoder configurations
-        'image_encoder': None,
-        'text_encoder': None,
-        'categorical_encoder': None,
-        'continuous_encoder': None
-    }
+        Returns:
+            Configuration dictionary in the format expected by load_model_from_config()
+        """
+        return self._saved_config.copy() if self._saved_config is not None else None
     
-    # Add encoder configs if they exist
-    if hasattr(model, 'image_encoder') and model.image_encoder is not None:
-        config['image_encoder'] = {
-            'aggregation_strategy': str(model.image_encoder.aggregation_strategy.value),
-            'model_type': str(model.image_encoder.model_type.value),
-            'num_image_fields': model.image_encoder.num_image_fields,
-            'embedding_dim': model.image_encoder.embedding_dim
-        }
-    
-    if hasattr(model, 'text_encoder') and model.text_encoder is not None:
-        config['text_encoder'] = {
-            'aggregation_strategy': str(model.text_encoder.aggregation_strategy.value),
-            'model_name': model.text_encoder.model_name,
-            'max_length': model.text_encoder.max_length,
-            'num_text_fields': model.text_encoder.num_text_fields,
-            'embedding_dim': model.text_encoder.embedding_dim,
-            'freeze_bert': getattr(model.text_encoder, 'freeze_bert', False)
-        }
-    
-    if hasattr(model, 'categorical_encoder') and model.categorical_encoder is not None:
-        # CRITICAL: Must have mlp_hidden_dims attribute - fail if missing
-        if not hasattr(model.categorical_encoder, 'mlp_hidden_dims'):
-            raise RuntimeError("categorical_encoder missing mlp_hidden_dims attribute - cannot save config correctly")
+    def set_config(self, config: Dict[str, Any]):
+        """
+        Store configuration in the model. This should be called when creating the model
+        from a config dict to enable proper saving/loading.
         
-        # Save as both keys for backwards compatibility
-        cat_encoder_config = {
-            'aggregation_strategy': str(model.categorical_encoder.aggregation_strategy.value),
-            'hash_vocab_size': model.categorical_encoder.hash_vocab_size,
-            'num_categorical_fields': model.categorical_encoder.num_categorical_fields,
-            'embedding_dim': model.categorical_encoder.embedding_dim,
-            'mlp_hidden_dims': model.categorical_encoder.mlp_hidden_dims  # No default - must exist
-        }
-        config['categorical_encoder'] = cat_encoder_config
-        config['categorical_encoder_config'] = cat_encoder_config  # Also save with _config suffix for compatibility
-    
-    # Extract continuous encoder config from user_continuous_encoder (both use same config)
-    if hasattr(model, 'user_continuous_encoder') and model.user_continuous_encoder is not None:
-        config['continuous_encoder'] = {
-            'embedding_dim': model.user_continuous_encoder.embedding_dim,
-            'hidden_dims': getattr(model.user_continuous_encoder, 'hidden_dims', [64]),
-            'dropout': getattr(model.user_continuous_encoder, 'dropout', 0.0),
-            'normalize': getattr(model.user_continuous_encoder, 'normalize', True)
-        }
-    
-    if hasattr(model, 'temporal_encoder') and model.temporal_encoder is not None:
-        config['temporal_encoder'] = {
-            'enable_item_lookup': True,
-            'aggregation_strategy': str(model.temporal_encoder.aggregation_strategy.value),
-            'output_dim': model.temporal_encoder.output_dim,
-            'item_embedding_dim': model.temporal_encoder.item_embedding_dim,
-            'lstm_hidden_dim': model.temporal_encoder.lstm_hidden_dim,
-            'lstm_num_layers': model.temporal_encoder.lstm_num_layers,
-            'lstm_dropout': getattr(model.temporal_encoder.lstm, 'dropout', 0.0),
-            'bidirectional': model.temporal_encoder.bidirectional,
-            'max_sequence_length': model.temporal_encoder.max_sequence_length,
-            'missing_item_strategy': model.temporal_encoder.missing_item_strategy
-        }
-    
-    return config
+        Args:
+            config: Configuration dictionary (will be normalized to save format)
+        """
+        # Normalize config: convert encoder_config keys to encoder keys for consistency
+        normalized_config = config.copy()
+        
+        # Normalize encoder config keys (support both formats)
+        for encoder_type in ['image', 'text', 'categorical', 'continuous', 'temporal']:
+            config_key = f'{encoder_type}_encoder_config'
+            encoder_key = f'{encoder_type}_encoder'
+            
+            # If both exist, prefer the one without _config suffix
+            if encoder_key in normalized_config:
+                # Already in correct format
+                pass
+            elif config_key in normalized_config:
+                # Convert _config suffix to no suffix
+                normalized_config[encoder_key] = normalized_config.pop(config_key)
+        
+        # Update encoder configs with actual values used (from encoders if available)
+        # This ensures we save what was actually used
+        if hasattr(self, 'categorical_encoder') and self.categorical_encoder is not None:
+            if hasattr(self.categorical_encoder, '_actual_config'):
+                normalized_config['categorical_encoder'] = self.categorical_encoder._actual_config
+        
+        if hasattr(self, 'user_continuous_encoder') and self.user_continuous_encoder is not None:
+            if hasattr(self.user_continuous_encoder, '_actual_config'):
+                normalized_config['continuous_encoder'] = self.user_continuous_encoder._actual_config
+        
+        self._saved_config = normalized_config
 
 
 def save_model_config(model: RecommendationPipeline, config_path: str):
     """
-    Save model configuration to JSON file
+    Save model configuration to JSON file.
+    Uses stored config from model creation.
     
     Args:
         model: Trained RecommendationPipeline instance
         config_path: Path to save the config JSON file
+        
+    Raises:
+        RuntimeError: If model has no stored config
     """
     import json
-    config = extract_model_config(model)
+    
+    stored_config = model.get_config()
+    if stored_config is None:
+        raise RuntimeError(
+            "Model has no stored config. Model must be created from config using "
+            "create_model_from_config() to enable saving."
+        )
+    
     with open(config_path, "w") as f:
-        json.dump(config, f, indent=2)
+        json.dump(stored_config, f, indent=2)
 
 
 def save_complete_model(model: RecommendationPipeline, save_dir: str, model_name: str = "model", verbose: bool = True):
@@ -1003,64 +958,14 @@ def load_model_from_config(config_path: str, weights_path: str, item_data: Optio
     import json
     import torch
     
-    # Load config (should be the saved config from training, which matches the checkpoint)
+    # Load config (saved config from training)
     with open(config_path) as f:
         config = json.load(f)
     
-    # STRICT: Verify config matches checkpoint structure BEFORE creating model
+    # Load state dict
     state_dict = torch.load(weights_path, map_location='cpu')
-    checkpoint_cat_mlp_keys = [k for k in state_dict.keys() if 'categorical_encoder.field_embeddings.field_0.mlp' in k]
-    checkpoint_layer_indices = set()
-    if checkpoint_cat_mlp_keys:
-        for key in checkpoint_cat_mlp_keys:
-            parts = key.split('.mlp.')
-            if len(parts) > 1:
-                layer_part = parts[1].split('.')[0]
-                try:
-                    checkpoint_layer_indices.add(int(layer_part))
-                except ValueError:
-                    pass
     
-    checkpoint_linear_layers = sorted([idx for idx in checkpoint_layer_indices if idx % 3 == 0])
-    
-    # Check both 'categorical_encoder' and 'categorical_encoder_config' keys
-    cat_config = config.get('categorical_encoder') or config.get('categorical_encoder_config')
-    if cat_config:
-        # STRICT: mlp_hidden_dims must be present in config
-        if 'mlp_hidden_dims' not in cat_config:
-            raise RuntimeError(
-                f"Config file missing 'mlp_hidden_dims' in categorical_encoder section. "
-                f"Cannot determine model structure. Config file: {config_path}"
-            )
-        
-        config_mlp_hidden_dims = cat_config['mlp_hidden_dims']
-        
-        # STRICT: Verify config matches checkpoint - FAIL if mismatch
-        if checkpoint_linear_layers == [0] and config_mlp_hidden_dims != []:
-            raise RuntimeError(
-                f"CRITICAL: Config mismatch! Checkpoint has mlp_hidden_dims: [] (layers: {checkpoint_linear_layers}), "
-                f"but config has mlp_hidden_dims: {config_mlp_hidden_dims}. "
-                f"Config file: {config_path}. "
-                f"Model cannot be loaded correctly. Please retrain the model with the fixed code."
-            )
-        elif checkpoint_linear_layers != [0] and config_mlp_hidden_dims == []:
-            raise RuntimeError(
-                f"CRITICAL: Config mismatch! Checkpoint has layers: {checkpoint_linear_layers}, "
-                f"but config has mlp_hidden_dims: []. "
-                f"Config file: {config_path}. "
-                f"Model cannot be loaded correctly. Please retrain the model with the fixed code."
-            )
-        
-        print(f"✅ Config verified - matches checkpoint structure")
-        print(f"🔍 Loading model with categorical_encoder config:")
-        print(f"   mlp_hidden_dims: {config_mlp_hidden_dims}")
-        print(f"   embedding_dim: {cat_config.get('embedding_dim', 'NOT SET')}")
-        print(f"   num_categorical_fields: {cat_config.get('num_categorical_fields', 'NOT SET')}")
-    else:
-        # If no categorical encoder in config, that's fine (model might not use it)
-        print(f"ℹ️  No categorical_encoder config found (model may not use categorical features)")
-    
-    # Create model with same configuration (now corrected to match checkpoint)
+    # Create model with same configuration
     model = RecommendationPipeline(
         embedding_dim=config['embedding_dim'],
         loss_type=config.get('loss_type', 'bce'),
@@ -1098,44 +1003,6 @@ def load_model_from_config(config_path: str, weights_path: str, item_data: Optio
         # Item data for temporal encoder
         item_data=item_data
     )
-    
-    # state_dict already loaded above, reuse it
-    # state_dict = torch.load(weights_path, map_location='cpu')  # Already loaded
-    
-    # STRICT: Verify model structure matches checkpoint AFTER loading
-    print(f"🔍 Checkpoint categorical encoder MLP layers: {sorted(checkpoint_layer_indices)}")
-    
-    # Check categorical encoder MLP structure in model
-    model_cat_mlp_keys = [k for k in model.state_dict().keys() if 'categorical_encoder.field_embeddings.field_0.mlp' in k]
-    model_layer_indices = set()
-    if model_cat_mlp_keys:
-        for key in model_cat_mlp_keys:
-            parts = key.split('.mlp.')
-            if len(parts) > 1:
-                layer_part = parts[1].split('.')[0]
-                try:
-                    model_layer_indices.add(int(layer_part))
-                except ValueError:
-                    pass
-        print(f"🔍 Model categorical encoder MLP layers: {sorted(model_layer_indices)}")
-    
-    # STRICT: Check for structural mismatch - FAIL if mismatch
-    if checkpoint_layer_indices and model_layer_indices:
-        # Find the final Linear layer in each (Linear layers are at multiples of 3: 0, 3, 6, ...)
-        checkpoint_linear_layers = sorted([idx for idx in checkpoint_layer_indices if idx % 3 == 0])
-        model_linear_layers = sorted([idx for idx in model_layer_indices if idx % 3 == 0])
-        
-        if checkpoint_linear_layers != model_linear_layers:
-            raise RuntimeError(
-                f"CRITICAL: Model structure mismatch after loading! "
-                f"Checkpoint has Linear layers at indices: {checkpoint_linear_layers}, "
-                f"but model has Linear layers at indices: {model_linear_layers}. "
-                f"This means the model structure doesn't match the checkpoint. "
-                f"Config file: {config_path}. "
-                f"Please retrain the model with the fixed code."
-            )
-        else:
-            print(f"✅ Model structure verified - matches checkpoint")
     
     # Check for architectural compatibility
     state_dict_keys = set(state_dict.keys())
