@@ -3,16 +3,17 @@
   
   # RecommendKit - Universal Recommendation System Framework
   
-  A ready-to-use, out-of-the-box library for training scalable recommendation systems. Built for accessibility and extensibility, this system can be adapted to any use case with minimal configuration.
+  A ready-to-use, out-of-the-box library for training scalable, two-tower network based recommendation systems. Built for accessibility and extensibility, this system can be adapted to any use case with minimal configuration.
 </div>
 
 ## ✨ Key Features
 
-- **🎯 Universal**: Works with any recommendation use case - e-commerce, content, social media, etc.
-- **📈 Highly Scalable**: Designed to handle datasets from thousands to millions of interactions
-- **🔧 Accessible**: Simple JSON configuration - no complex setup required
-- **🚀 Extensible**: Modular architecture allows easy customization and feature expansion
-- **⚡ Production Ready**: Includes training, inference, and model persistence out of the box
+- **Universal**: Works with any recommendation use case - e-commerce, content, social media, etc.
+- **Two-tower Architecture**: Follows industry standard two-tower model architecture for user and items
+- **Highly Scalable**: Designed to handle datasets from thousands to millions of interactions
+- **Accessible**: Simple JSON configuration - no complex setup required
+- **Extensible**: Modular architecture allows easy customization and feature expansion
+- **Production Ready**: Includes training, inference, and model persistence out of the box
 
 ## 📁 Project Structure
 
