@@ -45,3 +45,4 @@ class BaseEncoder(nn.Module):
         """
         return self.embedding_dim
 
+

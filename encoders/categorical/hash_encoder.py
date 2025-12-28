@@ -200,3 +200,4 @@ class HashCategoricalEncoder(BaseCategoricalEncoder):
             hash_tensor = torch.tensor([joint_hash_id], dtype=torch.long, device=device)
             return self.joint_embedding(hash_tensor)
 
+

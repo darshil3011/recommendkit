@@ -37,3 +37,4 @@ def create_continuous_encoder(config: Dict[str, Any]) -> Any:
         normalize=config.get('normalize', True)
     )
 
+

@@ -495,3 +495,4 @@ class LSTMTemporalEncoder(BaseTemporalEncoder):
         # Stack all samples
         return torch.cat(batch_embeddings, dim=0)  # (batch_size, embedding_dim)
 
+

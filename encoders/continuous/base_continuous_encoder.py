@@ -60,3 +60,4 @@ class BaseContinuousEncoder(BaseEncoder):
         """
         raise NotImplementedError("Subclasses must implement forward()")
 
+
