@@ -35,3 +35,4 @@ def create_categorical_encoder(config: Dict[str, Any]) -> Any:
         num_categorical_fields=config.get('num_categorical_fields', 3)
     )
 
+
