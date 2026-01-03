@@ -28,7 +28,7 @@ recommendkit/
 │       └── correlated_dataset.json              # Generated dataset
 ├── encoders/                         # Feature encoders (modular structure)
 │   ├── text/                        # Text encoders (transformer, word2vec)
-│   ├── image/                       # Image encoders (CNN, ViT)
+│   ├── image/                       # Image encoders (CNN, ResNet, ViT)
 │   ├── categorical/                 # Categorical encoders (hash-based)
 │   ├── continuous/                  # Continuous encoders (MLP-based)
 │   └── base_encoder.py              # Base encoder class
@@ -272,19 +272,36 @@ Supported models:
 
 ### **Image Encoders**
 
-Choose between CNN or Vision Transformer:
+Choose between CNN, ResNet (lightweight), or Vision Transformer:
 
 ```json
 {
   "image_encoder_config": {
-    "model_type": "vit",  // or "cnn"
+    "model_type": "resnet",  // "cnn", "resnet", or "vit"
+    "model_name": "resnet18",  // For ResNet: "resnet18", "resnet34", "resnet50", etc.
     "aggregation_strategy": "concat",
     "embedding_dim": 256,
-    "pretrained": true,  // For ViT only
+    "pretrained": true,  // For ResNet/ViT
     "num_cnn_layers": 3  // For CNN only
   }
 }
 ```
+
+**ResNet (Recommended for lightweight use):**
+- Fast inference with pretrained ImageNet weights
+- Supports ResNet18/34/50/101/152 variants
+- ResNet18 is ~11M parameters (much lighter than ViT)
+- Default choice for production deployments
+
+**CNN:**
+- Custom lightweight architecture
+- No pretrained weights
+- Good for small datasets or custom architectures
+
+**ViT:**
+- Vision Transformer for high accuracy
+- Larger model size (~86M parameters for ViT-B)
+- Best for complex visual understanding tasks
 
 ### **Bring Your Own Encoders**
 
