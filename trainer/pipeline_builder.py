@@ -480,8 +480,7 @@ class RecommendationPipeline(nn.Module):
         
         # Encode temporal
         if "temporal" in features and self.temporal_encoder is not None:
-            temporal_embedding = self.temporal_encoder(features["temporal"])
-            encoded["temporal"] = temporal_embedding
+            encoded.update(self.temporal_encoder(features["temporal"]))
         
         # Align all embeddings to target dimension
         aligned_encoded = aligner(encoded)
