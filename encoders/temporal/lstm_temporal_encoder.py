@@ -496,3 +496,4 @@ class LSTMTemporalEncoder(BaseTemporalEncoder):
         return torch.cat(batch_embeddings, dim=0)  # (batch_size, embedding_dim)
 
 
+

@@ -87,3 +87,4 @@ class BaseCategoricalEncoder(BaseEncoder):
         raise NotImplementedError("Subclasses must implement forward()")
 
 
+

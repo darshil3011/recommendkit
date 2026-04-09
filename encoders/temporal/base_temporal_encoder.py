@@ -105,3 +105,4 @@ class BaseTemporalEncoder(BaseEncoder):
         raise NotImplementedError("Subclasses must implement forward()")
 
 
+
