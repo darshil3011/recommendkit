@@ -291,12 +291,8 @@ def evaluate_recommendations(
     # Aggregate metrics across all users
     aggregated_metrics = {}
     for k in k_values:
-        precision_key = f'precision@{k}'
-        recall_key = f'recall@{k}'
-        
-        # Average across all users
-        aggregated_metrics[precision_key] = np.mean([m[precision_key] for m in all_user_metrics])
-        aggregated_metrics[recall_key] = np.mean([m[recall_key] for m in all_user_metrics])
+        for metric in [f'precision@{k}', f'recall@{k}', f'hr@{k}', f'ndcg@{k}']:
+            aggregated_metrics[metric] = np.mean([m[metric] for m in all_user_metrics])
     
     # Add number of evaluated users
     aggregated_metrics['num_users_evaluated'] = evaluated_users
@@ -442,11 +438,11 @@ def main():
         print()
         
         for k in args.k:
-            precision_key = f'precision@{k}'
-            recall_key = f'recall@{k}'
             print(f"K = {k}:")
-            print(f"  Precision@{k}: {metrics[precision_key]:.4f}")
-            print(f"  Recall@{k}:    {metrics[recall_key]:.4f}")
+            print(f"  HR@{k}:        {metrics[f'hr@{k}']:.4f}")
+            print(f"  NDCG@{k}:      {metrics[f'ndcg@{k}']:.4f}")
+            print(f"  Precision@{k}: {metrics[f'precision@{k}']:.4f}")
+            print(f"  Recall@{k}:    {metrics[f'recall@{k}']:.4f}")
             print()
         
         if args.output_file:
